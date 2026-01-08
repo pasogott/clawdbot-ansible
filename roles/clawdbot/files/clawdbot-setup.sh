@@ -101,19 +101,6 @@ grep -q '.clawdbot-init' /home/clawdbot/.bashrc 2>/dev/null || {
     echo '[ -f ~/.clawdbot-init ] && source ~/.clawdbot-init' >> /home/clawdbot/.bashrc
 }
 
-# Check if running in interactive terminal
-if [ -t 0 ] && [ -t 1 ]; then
-    # Interactive mode - switch user directly
-    exec sudo -i -u clawdbot
-else
-    # Non-interactive mode (e.g., over SSH) - provide instructions
-    echo ""
-    echo -e "${GREEN}✅ Setup complete!${NC}"
-    echo ""
-    echo -e "${YELLOW}To complete configuration, switch to clawdbot user:${NC}"
-    echo ""
-    echo "    sudo -i -u clawdbot"
-    echo ""
-    echo "Or reconnect and the welcome message will appear automatically."
-    echo ""
-fi
+# Switch to clawdbot user with explicit interactive shell
+# Using setsid to create new session + force pseudo-terminal allocation
+exec sudo -i -u clawdbot /bin/bash --login
