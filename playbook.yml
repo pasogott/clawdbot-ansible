@@ -78,6 +78,7 @@
         creates: "{{ '/opt/homebrew/bin/brew' if is_macos else '/home/linuxbrew/.linuxbrew/bin/brew' }}"
       when: not homebrew_check.stat.exists
       register: homebrew_install
+      become: false
 
     - name: Add Homebrew to PATH for current session (Linux)
       ansible.builtin.set_fact:
