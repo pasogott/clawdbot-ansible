@@ -14,9 +14,7 @@
   pre_tasks:
     - name: Enable color terminal for current session
       ansible.builtin.set_fact:
-        ansible_env:
-          TERM: xterm-256color
-          COLORTERM: truecolor
+        ansible_env: "{{ ansible_env | combine({'TERM': 'xterm-256color', 'COLORTERM': 'truecolor'}) }}"
 
     - name: Detect operating system
       ansible.builtin.set_fact:
@@ -78,6 +76,7 @@
         creates: "{{ '/opt/homebrew/bin/brew' if is_macos else '/home/linuxbrew/.linuxbrew/bin/brew' }}"
       when: not homebrew_check.stat.exists
       register: homebrew_install
+      become: false
 
     - name: Add Homebrew to PATH for current session (Linux)
       ansible.builtin.set_fact:
