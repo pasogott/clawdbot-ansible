@@ -47,6 +47,12 @@
         msg: "✅ System packages updated and upgraded"
       when: is_debian and apt_upgrade_result.changed
 
+    - name: Install ACL for privilege escalation
+      ansible.builtin.package:
+        name: acl
+        state: present
+      when: is_linux and not is_macos
+
     - name: Check if running as root
       ansible.builtin.command: id -u
       register: user_id
