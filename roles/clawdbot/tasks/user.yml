@@ -66,7 +66,7 @@
     mode: '0700'
 
 - name: Add SSH authorized keys for clawdbot user
-  ansible.builtin.authorized_key:
+  ansible.posix.authorized_key:
     user: clawdbot
     state: present
     key: "{{ item }}"
