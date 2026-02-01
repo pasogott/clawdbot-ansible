@@ -1,0 +1,147 @@
+---
+- name: Create openclaw system user
+  ansible.builtin.user:
+    name: openclaw
+    comment: "OpenClaw Service User"
+    system: true
+    shell: /bin/bash
+    create_home: true
+    home: /home/openclaw
+    state: present
+
+- name: Add openclaw user to sudoers with scoped NOPASSWD
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/openclaw
+    mode: '0440'
+    owner: root
+    group: root
+    content: |
+      # OpenClaw sudo permissions (scoped for security)
+      #
+      # SECURITY NOTE: These permissions are intentionally limited.
+      # If openclaw is compromised, attackers can only:
+      # - Manage the openclaw service
+      # - Run basic tailscale diagnostics
+      # - View openclaw logs
+      #
+      # To grant full tailscale control (e.g., for self-healing VPN):
+      #   openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
+      #
+      # To grant full sudo (NOT RECOMMENDED):
+      #   openclaw ALL=(ALL) NOPASSWD: ALL
+
+      # Service control - openclaw service only
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl start openclaw
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop openclaw
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart openclaw
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl status openclaw
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable openclaw
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable openclaw
+      # daemon-reload affects all units (required after service file changes)
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+
+      # Tailscale - diagnostics + connect/disconnect
+      # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
+      # remove 'up' and 'down' lines - operator must then manage VPN manually.
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
+
+      # Journal access - openclaw logs only
+      openclaw ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Set openclaw user as primary user for installation
+  ansible.builtin.set_fact:
+    openclaw_user: openclaw
+    openclaw_home: /home/openclaw
+
+# Fix DBus issues for systemd user services
+- name: Get openclaw user ID
+  ansible.builtin.command: id -u openclaw
+  register: openclaw_uid
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
+- name: Display openclaw user ID
+  ansible.builtin.debug:
+    msg: "OpenClaw user ID: {{ openclaw_uid.stdout }}"
+  when: ansible_os_family == 'Debian'
+
+- name: Enable lingering for openclaw user (allows systemd user services without login)
+  ansible.builtin.command: loginctl enable-linger openclaw
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
+- name: Create runtime directory for openclaw user
+  ansible.builtin.file:
+    path: "/run/user/{{ openclaw_uid.stdout }}"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: '0700'
+  when: ansible_os_family == 'Debian'
+
+- name: Store openclaw UID as fact for later use
+  ansible.builtin.set_fact:
+    openclaw_uid_value: "{{ openclaw_uid.stdout }}"
+  when: ansible_os_family == 'Debian'
+
+# SSH key configuration
+- name: Create .ssh directory for openclaw user
+  ansible.builtin.file:
+    path: "{{ openclaw_home }}/.ssh"
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: '0700'
+
+- name: Add SSH authorized keys for openclaw user
+  ansible.builtin.authorized_key:
+    user: openclaw
+    state: present
+    key: "{{ item }}"
+  loop: "{{ openclaw_ssh_keys }}"
+  when: openclaw_ssh_keys | length > 0
+
+- name: Display SSH key configuration status
+  ansible.builtin.debug:
+    msg: "{{ openclaw_ssh_keys | length }} SSH key(s) configured for openclaw user"
+  when: openclaw_ssh_keys | length > 0
+
+- name: Display SSH key warning if none configured
+  ansible.builtin.debug:
+    msg: "No SSH keys configured. Set 'openclaw_ssh_keys' variable to allow SSH access."
+  when: openclaw_ssh_keys | length == 0
+
+- name: Set XDG_RUNTIME_DIR in .bashrc for openclaw user
+  ansible.builtin.lineinfile:
+    path: /home/openclaw/.bashrc
+    line: 'export XDG_RUNTIME_DIR=/run/user/$(id -u)'
+    state: present
+    create: true
+    owner: openclaw
+    group: openclaw
+    mode: '0644'
+  when: ansible_os_family == 'Debian'
+
+- name: Set DBUS_SESSION_BUS_ADDRESS in .bashrc for openclaw user
+  ansible.builtin.blockinfile:
+    path: /home/openclaw/.bashrc
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - DBus config"
+    block: |
+      # DBus session bus configuration
+      if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+        if [ -f "${XDG_RUNTIME_DIR}/bus" ]; then
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+        fi
+      fi
+    create: true
+    owner: openclaw
+    group: openclaw
+    mode: '0644'
+  when: ansible_os_family == 'Debian'

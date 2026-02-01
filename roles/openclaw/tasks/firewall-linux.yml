@@ -15,7 +15,7 @@
     group: root
     mode: '0644'
     content: |
-      # Clawdbot security hardening - SSH protection
+      # OpenClaw security hardening - SSH protection
       [DEFAULT]
       bantime = 3600
       findtime = 600
@@ -61,7 +61,7 @@
     group: root
     mode: '0644'
     content: |
-      // Clawdbot security hardening - automatic security updates
+      // OpenClaw security hardening - automatic security updates
       Unattended-Upgrade::Allowed-Origins {
           "${distro_id}:${distro_codename}-security";
           "${distro_id}ESMApps:${distro_codename}-apps-security";

@@ -7,7 +7,7 @@ description: Firewall configuration, Docker isolation, and security hardening de
 
 ## Overview
 
-This playbook implements a multi-layer defense strategy to secure Clawdbot installations.
+This playbook implements a multi-layer defense strategy to secure OpenClaw installations.
 
 ## Security Layers
 
@@ -67,28 +67,28 @@ ports:
 
 ### Layer 5: Non-Root Container
 
-Container processes run as unprivileged `clawdbot` user.
+Container processes run as unprivileged `openclaw` user.
 
 ### Layer 6: Systemd Hardening
 
-The clawdbot service runs with security restrictions:
+The openclaw service runs with security restrictions:
 
 - `NoNewPrivileges=true` - Prevents privilege escalation
 - `PrivateTmp=true` - Isolated /tmp directory
 - `ProtectSystem=strict` - Read-only system directories
 - `ProtectHome=read-only` - Limited home directory access
-- `ReadWritePaths` - Only ~/.clawdbot is writable
+- `ReadWritePaths` - Only ~/.openclaw is writable
 
 ### Layer 7: Scoped Sudo Access
 
-The clawdbot user has limited sudo permissions (not full root):
+The openclaw user has limited sudo permissions (not full root):
 
 ```bash
 # Allowed commands only:
-- systemctl start/stop/restart/status clawdbot
+- systemctl start/stop/restart/status openclaw
 - systemctl daemon-reload
 - tailscale commands
-- journalctl for clawdbot logs
+- journalctl for openclaw logs
 ```
 
 ### Layer 8: Automatic Security Updates
@@ -138,7 +138,7 @@ sudo systemctl status unattended-upgrades
 
 ## Tailscale Access
 
-Clawdbot's web interface (port 3000) is bound to localhost. Access it via:
+OpenClaw's web interface (port 3000) is bound to localhost. Access it via:
 
 1. **SSH tunnel**:
    ```bash
@@ -150,7 +150,7 @@ Clawdbot's web interface (port 3000) is bound to localhost. Access it via:
    ```bash
    # On server: already done by playbook
    sudo tailscale up
-   
+
    # From your machine:
    # Browse to http://TAILSCALE_IP:3000
    ```
@@ -192,5 +192,5 @@ After installation, verify:
 ## Reporting Security Issues
 
 If you discover a security vulnerability, please report it privately:
-- Clawdbot: https://github.com/clawdbot/clawdbot/security
-- This installer: https://github.com/openclaw/clawdbot-ansible/security
+- OpenClaw: https://github.com/openclaw/openclaw/security
+- This installer: https://github.com/openclaw/openclaw-ansible/security

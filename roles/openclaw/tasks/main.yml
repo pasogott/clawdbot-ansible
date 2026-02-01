@@ -17,5 +17,5 @@
 - name: Include Node.js installation tasks
   ansible.builtin.include_tasks: nodejs.yml
 
-- name: Include Clawdbot setup tasks
-  ansible.builtin.include_tasks: clawdbot.yml
+- name: Include OpenClaw setup tasks
+  ansible.builtin.include_tasks: openclaw.yml

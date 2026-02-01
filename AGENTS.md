@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Ansible playbook for automated, hardened Clawdbot installation on Debian/Ubuntu systems.
+Ansible playbook for automated, hardened OpenClaw installation on Debian/Ubuntu systems.
 
 ## Key Principles
 
@@ -16,14 +16,14 @@ Ansible playbook for automated, hardened Clawdbot installation on Debian/Ubuntu 
 ### Task Order
 Docker must be installed **before** firewall configuration.
 
-Task order in `roles/clawdbot/tasks/main.yml`:
+Task order in `roles/openclaw/tasks/main.yml`:
 ```yaml
 - tailscale.yml  # VPN setup
 - user.yml       # Create system user
 - docker.yml     # Install Docker (creates /etc/docker)
 - firewall.yml   # Configure UFW + daemon.json (needs /etc/docker to exist)
 - nodejs.yml     # Node.js + pnpm
-- clawdbot.yml   # Container setup
+- openclaw.yml   # Container setup
 ```
 
 Reason: `firewall.yml` writes `/etc/docker/daemon.json` and restarts Docker service.
@@ -110,16 +110,16 @@ Keep docs concise. No progress logs, no refactoring summaries.
 
 ### Host System
 ```
-/opt/clawdbot/              # Installation files
-/home/clawdbot/.clawdbot/   # Config and data
-/etc/systemd/system/clawdbot.service
+/opt/openclaw/              # Installation files
+/home/openclaw/.openclaw/   # Config and data
+/etc/systemd/system/openclaw.service
 /etc/docker/daemon.json
 /etc/ufw/after.rules
 ```
 
 ### Repository
 ```
-roles/clawdbot/
+roles/openclaw/
 ├── tasks/       # Ansible tasks (order matters!)
 ├── templates/   # Jinja2 configs
 ├── defaults/    # Variables
@@ -141,7 +141,7 @@ SSH is exposed to the internet. Fail2ban automatically bans IPs after 5 failed a
 Security patches should be applied promptly. Automatic security-only updates reduce vulnerability windows.
 
 ### Why Scoped Sudo?
-The clawdbot user only needs to manage its own service and Tailscale. Full root access would be dangerous if the app is compromised.
+The openclaw user only needs to manage its own service and Tailscale. Full root access would be dangerous if the app is compromised.
 
 ### Why Localhost Binding?
 Defense in depth. If DOCKER-USER fails, localhost binding prevents external access.
@@ -160,7 +160,7 @@ Clean lifecycle, auto-start, logging integration.
 ## Making Changes
 
 ### Adding a New Task
-1. Add to appropriate file in `roles/clawdbot/tasks/`
+1. Add to appropriate file in `roles/openclaw/tasks/`
 2. Update main.yml if new task file
 3. Test with `--check` first
 4. Verify idempotency (can run multiple times safely)
@@ -185,5 +185,5 @@ Clean lifecycle, auto-start, logging integration.
 
 ## Support Channels
 
-- Clawdbot issues: https://github.com/clawdbot/clawdbot
-- This installer: https://github.com/pasogott/clawdbot-ansible
+- OpenClaw issues: https://github.com/openclaw/openclaw
+- This installer: https://github.com/openclaw/openclaw-ansible

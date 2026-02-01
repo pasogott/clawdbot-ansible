@@ -1,0 +1,90 @@
+---
+- name: Create OpenClaw directories (structure only, no config files)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ openclaw_config_dir }}", mode: '0755' }
+    - { path: "{{ openclaw_config_dir }}/sessions", mode: '0755' }
+    - { path: "{{ openclaw_config_dir }}/credentials", mode: '0700' }
+    - { path: "{{ openclaw_config_dir }}/data", mode: '0755' }
+    - { path: "{{ openclaw_config_dir }}/logs", mode: '0755' }
+
+- name: Create pnpm directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: '0755'
+  loop:
+    - "{{ openclaw_home }}/.local/share/pnpm"
+    - "{{ openclaw_home }}/.local/share/pnpm/store"
+    - "{{ openclaw_home }}/.local/bin"
+
+- name: Ensure pnpm directories have correct ownership
+  ansible.builtin.file:
+    path: "{{ openclaw_home }}/.local/share/pnpm"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    recurse: true
+    mode: '0755'
+
+- name: Configure pnpm for openclaw user
+  ansible.builtin.shell:
+    cmd: |
+      pnpm config set global-dir {{ openclaw_home }}/.local/share/pnpm
+      pnpm config set global-bin-dir {{ openclaw_home }}/.local/bin
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  changed_when: true  # Always consider changed as pnpm config may update
+
+- name: Display installation mode
+  ansible.builtin.debug:
+    msg: "📦 Installation mode: {{ openclaw_install_mode }}"
+
+# Include appropriate installation method based on mode
+- name: Include release installation (pnpm install -g)
+  ansible.builtin.include_tasks: openclaw-release.yml
+  when: openclaw_install_mode == "release"
+
+- name: Include development installation (git clone + build + link)
+  ansible.builtin.include_tasks: openclaw-development.yml
+  when: openclaw_install_mode == "development"
+
+- name: Configure .bashrc for openclaw user (base config)
+  ansible.builtin.blockinfile:
+    path: "{{ openclaw_home }}/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw pnpm"
+    block: |
+      # pnpm configuration
+      export PNPM_HOME="{{ openclaw_home }}/.local/share/pnpm"
+      export PATH="{{ openclaw_home }}/.local/bin:$PNPM_HOME:$PATH"
+    create: true
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: '0644'
+    insertafter: EOF
+
+# NOTE: We do NOT create config.yml here - openclaw onboard/configure will do that
+# We also do NOT install the systemd service - openclaw onboard --install-daemon will do that
+# The .openclaw directory structure is created above, but config and daemon are user-initiated
+
+- name: Display configuration note
+  ansible.builtin.debug:
+    msg: |
+      ℹ️  OpenClaw is installed but NOT configured yet.
+
+      Next steps (run as openclaw user):
+      1. Switch user: sudo su - openclaw
+      2. Run onboarding: openclaw onboard --install-daemon
+
+      This will:
+      • Create configuration files (~/.openclaw/openclaw.json)
+      • Guide you through provider setup
+      • Install and start the daemon service automatically

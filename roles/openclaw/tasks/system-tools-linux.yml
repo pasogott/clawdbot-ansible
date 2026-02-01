@@ -46,9 +46,9 @@
     state: present
     update_cache: true
 
-- name: Set zsh as default shell for clawdbot user (Linux)
+- name: Set zsh as default shell for openclaw user (Linux)
   ansible.builtin.user:
-    name: "{{ clawdbot_user }}"
+    name: "{{ openclaw_user }}"
     shell: /usr/bin/zsh
 
 - name: Deploy global vim configuration (Linux)
@@ -59,10 +59,10 @@
     group: root
     mode: '0644'
 
-- name: Configure .bashrc for clawdbot user (Linux)
+- name: Configure .bashrc for openclaw user (Linux)
   ansible.builtin.blockinfile:
-    path: "{{ clawdbot_home }}/.bashrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - Clawdbot config"
+    path: "{{ openclaw_home }}/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw config"
     block: |
       # Enable 256 colors
       export TERM=xterm-256color
@@ -72,8 +72,8 @@
       eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
       # Add pnpm to PATH
-      export PNPM_HOME="{{ clawdbot_home }}/.local/share/pnpm"
-      export PATH="{{ clawdbot_home }}/.local/bin:$PNPM_HOME:$PATH"
+      export PNPM_HOME="{{ openclaw_home }}/.local/share/pnpm"
+      export PATH="{{ openclaw_home }}/.local/bin:$PNPM_HOME:$PATH"
 
       # Color support for common tools
       export CLICOLOR=1
@@ -84,14 +84,14 @@
       alias grep='grep --color=auto'
       alias ll='ls -lah'
     create: true
-    owner: "{{ clawdbot_user }}"
-    group: "{{ clawdbot_user }}"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0644'
 
-- name: Configure .zshrc for clawdbot user (Linux)
+- name: Configure .zshrc for openclaw user (Linux)
   ansible.builtin.blockinfile:
-    path: "{{ clawdbot_home }}/.zshrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - Clawdbot config"
+    path: "{{ openclaw_home }}/.zshrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw config"
     block: |
       # Enable 256 colors
       export TERM=xterm-256color
@@ -101,8 +101,8 @@
       eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
       # Add pnpm to PATH
-      export PNPM_HOME="{{ clawdbot_home }}/.local/share/pnpm"
-      export PATH="{{ clawdbot_home }}/.local/bin:$PNPM_HOME:$PATH"
+      export PNPM_HOME="{{ openclaw_home }}/.local/share/pnpm"
+      export PATH="{{ openclaw_home }}/.local/bin:$PNPM_HOME:$PATH"
 
       # Color support for common tools
       export CLICOLOR=1
@@ -113,6 +113,6 @@
       alias grep='grep --color=auto'
       alias ll='ls -lah'
     create: true
-    owner: "{{ clawdbot_user }}"
-    group: "{{ clawdbot_user }}"
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0644'

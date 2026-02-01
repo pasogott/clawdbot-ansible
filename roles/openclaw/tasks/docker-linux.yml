@@ -61,7 +61,7 @@
 
 - name: Add user to docker group
   ansible.builtin.user:
-    name: "{{ clawdbot_user }}"
+    name: "{{ openclaw_user }}"
     groups: docker
     append: true
 

@@ -7,12 +7,12 @@ description: Common issues and solutions
 
 ## Container Can't Reach Internet
 
-**Symptom**: Clawdbot can't connect to WhatsApp/Telegram
+**Symptom**: OpenClaw can't connect to WhatsApp/Telegram
 
 **Check**:
 ```bash
 # Test from container
-sudo docker exec clawdbot ping -c 3 8.8.8.8
+sudo docker exec openclaw ping -c 3 8.8.8.8
 
 # Check UFW allows outbound
 sudo ufw status verbose | grep OUT
@@ -26,7 +26,7 @@ sudo iptables -L DOCKER-USER -n -v
 # Restart Docker + Firewall
 sudo systemctl restart docker
 sudo ufw reload
-sudo systemctl restart clawdbot
+sudo systemctl restart openclaw
 ```
 
 ## Port Already in Use
@@ -38,11 +38,11 @@ sudo systemctl restart clawdbot
 # Find what's using port 3000
 sudo ss -tlnp | grep 3000
 
-# Change Clawdbot port
-sudo nano /opt/clawdbot/docker-compose.yml
+# Change OpenClaw port
+sudo nano /opt/openclaw/docker-compose.yml
 # Change: "127.0.0.1:3001:3000"
 
-sudo systemctl restart clawdbot
+sudo systemctl restart openclaw
 ```
 
 ## Firewall Lockout
@@ -69,24 +69,24 @@ sudo ufw enable
 **Check logs**:
 ```bash
 # Systemd logs
-sudo journalctl -u clawdbot -n 50
+sudo journalctl -u openclaw -n 50
 
 # Docker logs
-sudo docker logs clawdbot
+sudo docker logs openclaw
 
 # Compose status
-sudo docker compose -f /opt/clawdbot/docker-compose.yml ps
+sudo docker compose -f /opt/openclaw/docker-compose.yml ps
 ```
 
 **Common fixes**:
 ```bash
 # Rebuild image
-cd /opt/clawdbot
+cd /opt/openclaw
 sudo docker compose build --no-cache
-sudo systemctl restart clawdbot
+sudo systemctl restart openclaw
 
 # Check permissions
-sudo chown -R clawdbot:clawdbot /home/clawdbot/.clawdbot
+sudo chown -R openclaw:openclaw /home/openclaw/.openclaw
 ```
 
 ## Verify Docker Isolation

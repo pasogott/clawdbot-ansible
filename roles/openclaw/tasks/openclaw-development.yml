@@ -1,0 +1,140 @@
+---
+# Development mode installation - Clone repo, build from source, link globally
+
+- name: Create code directory
+  ansible.builtin.file:
+    path: "{{ openclaw_code_dir }}"
+    state: directory
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: '0755'
+
+- name: Check if openclaw repository already exists
+  ansible.builtin.stat:
+    path: "{{ openclaw_repo_dir }}/.git"
+  register: openclaw_repo_exists
+
+- name: Clone openclaw repository
+  ansible.builtin.git:
+    repo: "{{ openclaw_repo_url }}"
+    dest: "{{ openclaw_repo_dir }}"
+    version: "{{ openclaw_repo_branch }}"
+    update: true
+  become: true
+  become_user: "{{ openclaw_user }}"
+  when: not openclaw_repo_exists.stat.exists
+
+- name: Pull latest changes if repo exists
+  ansible.builtin.git:
+    repo: "{{ openclaw_repo_url }}"
+    dest: "{{ openclaw_repo_dir }}"
+    version: "{{ openclaw_repo_branch }}"
+    update: true
+  become: true
+  become_user: "{{ openclaw_user }}"
+  when: openclaw_repo_exists.stat.exists
+  register: git_pull_result
+
+- name: Display git pull status
+  ansible.builtin.debug:
+    msg: "Git repository updated: {{ git_pull_result.changed | default(false) }}"
+  when: openclaw_repo_exists.stat.exists
+
+- name: Install dependencies with pnpm
+  ansible.builtin.shell:
+    cmd: pnpm install
+    chdir: "{{ openclaw_repo_dir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: "{{ openclaw_home }}/.local/bin:/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ openclaw_home }}"
+  register: pnpm_install_result
+  changed_when: "'Already up to date' not in pnpm_install_result.stdout"
+
+- name: Build openclaw from source
+  ansible.builtin.shell:
+    cmd: pnpm build
+    chdir: "{{ openclaw_repo_dir }}"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: "{{ openclaw_home }}/.local/bin:/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    HOME: "{{ openclaw_home }}"
+  register: pnpm_build_result
+  changed_when: true  # Build always changes dist/ directory
+
+- name: Display build output
+  ansible.builtin.debug:
+    msg: "Build completed successfully"
+  when: pnpm_build_result.rc == 0
+
+- name: Check if dist directory exists
+  ansible.builtin.stat:
+    path: "{{ openclaw_repo_dir }}/dist"
+  register: dist_dir
+
+- name: Fail if build didn't create dist directory
+  ansible.builtin.fail:
+    msg: "Build failed - dist directory not found"
+  when: not dist_dir.stat.exists
+
+- name: Remove existing global openclaw symlink (if any)
+  ansible.builtin.file:
+    path: "{{ openclaw_home }}/.local/bin/openclaw"
+    state: absent
+
+- name: Create symlink to openclaw binary
+  ansible.builtin.file:
+    src: "{{ openclaw_repo_dir }}/bin/openclaw.js"
+    dest: "{{ openclaw_home }}/.local/bin/openclaw"
+    state: link
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    force: true
+
+- name: Make openclaw binary executable
+  ansible.builtin.file:
+    path: "{{ openclaw_repo_dir }}/bin/openclaw.js"
+    mode: '0755'
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+
+- name: Verify openclaw installation from development build
+  ansible.builtin.shell:
+    cmd: "{{ openclaw_home }}/.local/bin/openclaw --version"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PATH: "{{ openclaw_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  register: openclaw_dev_version
+  changed_when: false
+
+- name: Display installed OpenClaw version (development build)
+  ansible.builtin.debug:
+    msg: |
+      ✅ OpenClaw installed from source: {{ openclaw_dev_version.stdout }}
+      📂 Repository: {{ openclaw_repo_dir }}
+      🔗 Binary: {{ openclaw_home }}/.local/bin/openclaw -> {{ openclaw_repo_dir }}/bin/openclaw.js
+
+- name: Add development mode info to .bashrc
+  ansible.builtin.blockinfile:
+    path: "{{ openclaw_home }}/.bashrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw development"
+    block: |
+      # OpenClaw development mode
+      export OPENCLAW_DEV_DIR="{{ openclaw_repo_dir }}"
+
+      # Aliases for development
+      alias openclaw-rebuild='cd {{ openclaw_repo_dir }} && pnpm build'
+      alias openclaw-dev='cd {{ openclaw_repo_dir }}'
+      alias openclaw-pull='cd {{ openclaw_repo_dir }} && git pull && pnpm install && pnpm build'
+    create: true
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
+    mode: '0644'

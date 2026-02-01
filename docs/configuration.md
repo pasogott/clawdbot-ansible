@@ -1,11 +1,11 @@
 # Configuration Guide
 
-This guide explains all available configuration options for the Clawdbot Ansible installer.
+This guide explains all available configuration options for the OpenClaw Ansible installer.
 
 ## Configuration File
 
 All default variables are defined in:
-**[`roles/clawdbot/defaults/main.yml`](../roles/clawdbot/defaults/main.yml)**
+**[`roles/openclaw/defaults/main.yml`](../roles/openclaw/defaults/main.yml)**
 
 ## How to Configure
 
@@ -15,8 +15,8 @@ Pass variables directly via `-e` flag:
 
 ```bash
 ansible-playbook playbook.yml --ask-become-pass \
-  -e clawdbot_install_mode=development \
-  -e "clawdbot_ssh_keys=['ssh-ed25519 AAAAC3... user@host']"
+  -e openclaw_install_mode=development \
+  -e "openclaw_ssh_keys=['ssh-ed25519 AAAAC3... user@host']"
 ```
 
 ### Method 2: Variables File
@@ -25,12 +25,12 @@ Create a `vars.yml` file:
 
 ```yaml
 # vars.yml
-clawdbot_install_mode: development
-clawdbot_ssh_keys:
+openclaw_install_mode: development
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx user@host"
   - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... admin@laptop"
-clawdbot_repo_url: "https://github.com/YOUR_USERNAME/clawdbot.git"
-clawdbot_repo_branch: "main"
+openclaw_repo_url: "https://github.com/YOUR_USERNAME/openclaw.git"
+openclaw_repo_branch: "main"
 tailscale_authkey: "tskey-auth-xxxxxxxxxxxxx"
 nodejs_version: "22.x"
 ```
@@ -43,7 +43,7 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars.yml
 
 ### Method 3: Edit Defaults
 
-Directly edit `roles/clawdbot/defaults/main.yml` before running the playbook.
+Directly edit `roles/openclaw/defaults/main.yml` before running the playbook.
 
 **Note**: This is not recommended for version control, use variables files instead.
 
@@ -51,109 +51,109 @@ Directly edit `roles/clawdbot/defaults/main.yml` before running the playbook.
 
 ### User Configuration
 
-#### `clawdbot_user`
+#### `openclaw_user`
 - **Type**: String
-- **Default**: `clawdbot`
-- **Description**: System user name for running Clawdbot
+- **Default**: `openclaw`
+- **Description**: System user name for running OpenClaw
 - **Example**:
   ```bash
-  -e clawdbot_user=myuser
+  -e openclaw_user=myuser
   ```
 
-#### `clawdbot_home`
+#### `openclaw_home`
 - **Type**: String
-- **Default**: `/home/clawdbot`
-- **Description**: Home directory for the clawdbot user
+- **Default**: `/home/openclaw`
+- **Description**: Home directory for the openclaw user
 - **Example**:
   ```bash
-  -e clawdbot_home=/home/myuser
+  -e openclaw_home=/home/myuser
   ```
 
-#### `clawdbot_ssh_keys`
+#### `openclaw_ssh_keys`
 - **Type**: List of strings
 - **Default**: `[]` (empty)
-- **Description**: SSH public keys for accessing the clawdbot user account
+- **Description**: SSH public keys for accessing the openclaw user account
 - **Example**:
   ```yaml
-  clawdbot_ssh_keys:
+  openclaw_ssh_keys:
     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx user@host"
     - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... admin@laptop"
   ```
   ```bash
-  -e "clawdbot_ssh_keys=['ssh-ed25519 AAAAC3... user@host']"
+  -e "openclaw_ssh_keys=['ssh-ed25519 AAAAC3... user@host']"
   ```
 
 ### Installation Mode
 
-#### `clawdbot_install_mode`
+#### `openclaw_install_mode`
 - **Type**: String (`release` or `development`)
 - **Default**: `release`
 - **Description**: Installation mode
-  - `release`: Install via npm (`pnpm install -g clawdbot@latest`)
+  - `release`: Install via npm (`pnpm install -g openclaw@latest`)
   - `development`: Clone repo, build from source, symlink binary
 - **Example**:
   ```bash
-  -e clawdbot_install_mode=development
+  -e openclaw_install_mode=development
   ```
 
 ### Development Mode Settings
 
-These variables only apply when `clawdbot_install_mode: development`
+These variables only apply when `openclaw_install_mode: development`
 
-#### `clawdbot_repo_url`
+#### `openclaw_repo_url`
 - **Type**: String (Git URL)
-- **Default**: `https://github.com/clawdbot/clawdbot.git`
+- **Default**: `https://github.com/openclaw/openclaw.git`
 - **Description**: Git repository URL to clone
 - **Example**:
   ```bash
-  -e clawdbot_repo_url=https://github.com/YOUR_USERNAME/clawdbot.git
+  -e openclaw_repo_url=https://github.com/YOUR_USERNAME/openclaw.git
   ```
 
-#### `clawdbot_repo_branch`
+#### `openclaw_repo_branch`
 - **Type**: String
 - **Default**: `main`
 - **Description**: Git branch to checkout
 - **Example**:
   ```bash
-  -e clawdbot_repo_branch=feature-branch
+  -e openclaw_repo_branch=feature-branch
   ```
 
-#### `clawdbot_code_dir`
+#### `openclaw_code_dir`
 - **Type**: String (Path)
-- **Default**: `{{ clawdbot_home }}/code`
+- **Default**: `{{ openclaw_home }}/code`
 - **Description**: Directory where code repositories are stored
 - **Example**:
   ```bash
-  -e clawdbot_code_dir=/home/clawdbot/projects
+  -e openclaw_code_dir=/home/openclaw/projects
   ```
 
-#### `clawdbot_repo_dir`
+#### `openclaw_repo_dir`
 - **Type**: String (Path)
-- **Default**: `{{ clawdbot_code_dir }}/clawdbot`
-- **Description**: Full path to clawdbot repository
+- **Default**: `{{ openclaw_code_dir }}/openclaw`
+- **Description**: Full path to openclaw repository
 - **Example**:
   ```bash
-  -e clawdbot_repo_dir=/home/clawdbot/projects/clawdbot
+  -e openclaw_repo_dir=/home/openclaw/projects/openclaw
   ```
 
-### Clawdbot Settings
+### OpenClaw Settings
 
-#### `clawdbot_port`
+#### `openclaw_port`
 - **Type**: Integer
 - **Default**: `3000`
-- **Description**: Port for Clawdbot gateway (currently informational)
+- **Description**: Port for OpenClaw gateway (currently informational)
 - **Example**:
   ```bash
-  -e clawdbot_port=8080
+  -e openclaw_port=8080
   ```
 
-#### `clawdbot_config_dir`
+#### `openclaw_config_dir`
 - **Type**: String (Path)
-- **Default**: `{{ clawdbot_home }}/.clawdbot`
-- **Description**: Clawdbot configuration directory
+- **Default**: `{{ openclaw_home }}/.openclaw`
+- **Description**: OpenClaw configuration directory
 - **Example**:
   ```bash
-  -e clawdbot_config_dir=/etc/clawdbot
+  -e openclaw_config_dir=/etc/openclaw
   ```
 
 ### Node.js Configuration
@@ -201,7 +201,7 @@ These are automatically set based on the detected OS:
 
 ```yaml
 # vars.yml
-clawdbot_ssh_keys:
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx user@desktop"
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHyyyyyyyy user@laptop"
 ```
@@ -214,10 +214,10 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars.yml
 
 ```yaml
 # vars-dev.yml
-clawdbot_install_mode: development
-clawdbot_repo_url: "https://github.com/myorg/clawdbot.git"
-clawdbot_repo_branch: "develop"
-clawdbot_ssh_keys:
+openclaw_install_mode: development
+openclaw_repo_url: "https://github.com/myorg/openclaw.git"
+openclaw_repo_branch: "develop"
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx dev@workstation"
 ```
 
@@ -229,9 +229,9 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars-dev.yml
 
 ```yaml
 # vars-prod.yml
-clawdbot_install_mode: release
+openclaw_install_mode: release
 tailscale_authkey: "tskey-auth-k1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6"
-clawdbot_ssh_keys:
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx admin@mgmt-server"
 nodejs_version: "22.x"
 ```
@@ -244,10 +244,10 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars-prod.yml
 
 ```yaml
 # vars-custom.yml
-clawdbot_user: mybot
-clawdbot_home: /opt/mybot
-clawdbot_config_dir: /etc/mybot
-clawdbot_code_dir: /opt/mybot/repositories
+openclaw_user: mybot
+openclaw_home: /opt/mybot
+openclaw_config_dir: /etc/mybot
+openclaw_code_dir: /opt/mybot/repositories
 ```
 
 ```bash
@@ -258,9 +258,9 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars-custom.yml
 
 ```yaml
 # vars-testing.yml
-clawdbot_install_mode: development
-clawdbot_repo_branch: "experimental-feature"
-clawdbot_ssh_keys:
+openclaw_install_mode: development
+openclaw_repo_branch: "experimental-feature"
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx tester@qa"
 ```
 
@@ -274,10 +274,10 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars-testing.yml
 
 ```yaml
 # environments/dev.yml
-clawdbot_install_mode: development
-clawdbot_repo_url: "https://github.com/clawdbot/clawdbot.git"
-clawdbot_repo_branch: "main"
-clawdbot_ssh_keys:
+openclaw_install_mode: development
+openclaw_repo_url: "https://github.com/openclaw/openclaw.git"
+openclaw_repo_branch: "main"
+openclaw_ssh_keys:
   - "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
 ```
 
@@ -285,9 +285,9 @@ clawdbot_ssh_keys:
 
 ```yaml
 # environments/staging.yml
-clawdbot_install_mode: release
+openclaw_install_mode: release
 tailscale_authkey: "{{ lookup('env', 'TAILSCALE_AUTHKEY_STAGING') }}"
-clawdbot_ssh_keys:
+openclaw_ssh_keys:
   - "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
 ```
 
@@ -295,9 +295,9 @@ clawdbot_ssh_keys:
 
 ```yaml
 # environments/prod.yml
-clawdbot_install_mode: release
+openclaw_install_mode: release
 tailscale_authkey: "{{ lookup('env', 'TAILSCALE_AUTHKEY_PROD') }}"
-clawdbot_ssh_keys:
+openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3... ops@prod-mgmt"
   - "ssh-ed25519 AAAAC3... admin@backup-server"
 nodejs_version: "22.x"
@@ -307,9 +307,9 @@ nodejs_version: "22.x"
 
 ### SSH Keys
 
-1. **Use dedicated keys**: Create separate SSH keys for Clawdbot access
+1. **Use dedicated keys**: Create separate SSH keys for OpenClaw access
    ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/clawdbot_ed25519 -C "clawdbot-access"
+   ssh-keygen -t ed25519 -f ~/.ssh/openclaw_ed25519 -C "openclaw-access"
    ```
 
 2. **Limit key permissions**: Use SSH key options to restrict access
@@ -320,7 +320,7 @@ nodejs_version: "22.x"
 3. **Rotate keys regularly**: Update SSH keys periodically
    ```bash
    ansible-playbook playbook.yml --ask-become-pass \
-     -e "clawdbot_ssh_keys=['$(cat ~/.ssh/new_key.pub)']"
+     -e "openclaw_ssh_keys=['$(cat ~/.ssh/new_key.pub)']"
    ```
 
 ### Tailscale Auth Keys
@@ -381,8 +381,8 @@ ansible-playbook playbook.yml --ask-become-pass \
 
 Check file ownership and permissions:
 ```bash
-sudo ls -la /home/clawdbot/.ssh/
-sudo cat /home/clawdbot/.ssh/authorized_keys
+sudo ls -la /home/openclaw/.ssh/
+sudo cat /home/openclaw/.ssh/authorized_keys
 ```
 
 ### Tailscale Not Connecting
@@ -405,4 +405,4 @@ ansible-playbook playbook.yml --ask-become-pass \
 - [Main README](../README.md)
 - [Development Mode Guide](development-mode.md)
 - [Upgrade Notes](../UPGRADE_NOTES.md)
-- [Defaults File](../roles/clawdbot/defaults/main.yml)
+- [Defaults File](../roles/openclaw/defaults/main.yml)

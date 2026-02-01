@@ -16,17 +16,17 @@
 
 # Common tasks for all operating systems
 
-- name: Install oh-my-zsh for clawdbot user
+- name: Install oh-my-zsh for openclaw user
   ansible.builtin.shell:
     cmd: |
       sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    creates: "{{ clawdbot_home }}/.oh-my-zsh"
+    creates: "{{ openclaw_home }}/.oh-my-zsh"
     executable: /bin/bash
   become: true
-  become_user: "{{ clawdbot_user }}"
+  become_user: "{{ openclaw_user }}"
   environment:
-    HOME: "{{ clawdbot_home }}"
-    USER: "{{ clawdbot_user }}"
+    HOME: "{{ openclaw_home }}"
+    USER: "{{ openclaw_user }}"
 
 - name: Configure git globally
   community.general.git_config:

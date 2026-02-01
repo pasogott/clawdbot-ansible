@@ -32,20 +32,20 @@
     PATH: "/opt/homebrew/bin:{{ ansible_env.PATH }}"
 
 - name: Get current user shell (macOS)
-  ansible.builtin.command: dscl . -read /Users/{{ clawdbot_user }} UserShell
+  ansible.builtin.command: dscl . -read /Users/{{ openclaw_user }} UserShell
   register: current_shell
   changed_when: false
   failed_when: false
 
-- name: Set zsh as default shell for clawdbot user (macOS)
-  ansible.builtin.command: chsh -s /bin/zsh {{ clawdbot_user }}
+- name: Set zsh as default shell for openclaw user (macOS)
+  ansible.builtin.command: chsh -s /bin/zsh {{ openclaw_user }}
   when: "'/bin/zsh' not in current_shell.stdout"
   changed_when: true
 
-- name: Configure .zshrc for clawdbot user (macOS)
+- name: Configure .zshrc for openclaw user (macOS)
   ansible.builtin.blockinfile:
-    path: "{{ clawdbot_home }}/.zshrc"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - Clawdbot config"
+    path: "{{ openclaw_home }}/.zshrc"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw config"
     block: |
       # Enable 256 colors
       export TERM=xterm-256color
@@ -55,7 +55,7 @@
       eval "$(/opt/homebrew/bin/brew shellenv)"
 
       # Add pnpm to PATH
-      export PATH="{{ clawdbot_home }}/.local/bin:$PATH"
+      export PATH="{{ openclaw_home }}/.local/bin:$PATH"
 
       # Color support for common tools
       export CLICOLOR=1
@@ -66,5 +66,5 @@
       alias grep='grep --color=auto'
       alias ll='ls -lah'
     create: true
-    owner: "{{ clawdbot_user }}"
+    owner: "{{ openclaw_user }}"
     mode: '0644'

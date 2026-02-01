@@ -3,23 +3,23 @@
 ## ✅ Completed Changes
 
 ### 1. Installation Modes (Release vs Development)
-- **File**: `roles/clawdbot/defaults/main.yml`
-- Added `clawdbot_install_mode` variable (release | development)
-- Release mode: Install via `pnpm install -g clawdbot@latest` (default)
+- **File**: `roles/openclaw/defaults/main.yml`
+- Added `openclaw_install_mode` variable (release | development)
+- Release mode: Install via `pnpm install -g openclaw@latest` (default)
 - Development mode: Clone repo, build, symlink binary
 - Development settings: repo URL, branch, code directory
 
 **Files Created**:
-- `roles/clawdbot/tasks/clawdbot-release.yml` - npm installation
-- `roles/clawdbot/tasks/clawdbot-development.yml` - git clone + build
+- `roles/openclaw/tasks/openclaw-release.yml` - npm installation
+- `roles/openclaw/tasks/openclaw-development.yml` - git clone + build
 - `docs/development-mode.md` - comprehensive guide
 
 **Development Mode Features**:
-- Clones to `~/code/clawdbot`
+- Clones to `~/code/openclaw`
 - Runs `pnpm install` and `pnpm build`
-- Symlinks `bin/clawdbot.js` to `~/.local/bin/clawdbot`
-- Adds aliases: `clawdbot-rebuild`, `clawdbot-dev`, `clawdbot-pull`
-- Sets `CLAWDBOT_DEV_DIR` environment variable
+- Symlinks `bin/openclaw.js` to `~/.local/bin/openclaw`
+- Adds aliases: `openclaw-rebuild`, `openclaw-dev`, `openclaw-pull`
+- Sets `OPENCLAW_DEV_DIR` environment variable
 
 **Usage**:
 ```bash
@@ -27,13 +27,13 @@
 ./run-playbook.sh
 
 # Development mode
-./run-playbook.sh -e clawdbot_install_mode=development
+./run-playbook.sh -e openclaw_install_mode=development
 
 # With custom repo
 ansible-playbook playbook.yml --ask-become-pass \
-  -e clawdbot_install_mode=development \
-  -e clawdbot_repo_url=https://github.com/YOUR_USERNAME/clawdbot.git \
-  -e clawdbot_repo_branch=feature-branch
+  -e openclaw_install_mode=development \
+  -e openclaw_repo_url=https://github.com/YOUR_USERNAME/openclaw.git \
+  -e openclaw_repo_branch=feature-branch
 ```
 
 ### 2. OS Detection & apt update/upgrade
@@ -50,58 +50,58 @@ ansible-playbook playbook.yml --ask-become-pass \
 - Automatically added to PATH
 
 ### 3. OS-Specific System Tools
-- **Files**: 
-  - `roles/clawdbot/tasks/system-tools.yml` (orchestrator)
-  - `roles/clawdbot/tasks/system-tools-linux.yml` (apt-based)
-  - `roles/clawdbot/tasks/system-tools-macos.yml` (brew-based)
+- **Files**:
+  - `roles/openclaw/tasks/system-tools.yml` (orchestrator)
+  - `roles/openclaw/tasks/system-tools-linux.yml` (apt-based)
+  - `roles/openclaw/tasks/system-tools-macos.yml` (brew-based)
 - Tools installed via appropriate package manager per OS
 - Homebrew shellenv integrated into .zshrc
 
 ### 4. OS-Specific Docker Installation
 - **Files**:
-  - `roles/clawdbot/tasks/docker.yml` (orchestrator)
-  - `roles/clawdbot/tasks/docker-linux.yml` (Docker CE)
-  - `roles/clawdbot/tasks/docker-macos.yml` (Docker Desktop)
+  - `roles/openclaw/tasks/docker.yml` (orchestrator)
+  - `roles/openclaw/tasks/docker-linux.yml` (Docker CE)
+  - `roles/openclaw/tasks/docker-macos.yml` (Docker Desktop)
 - Linux: Docker CE via apt
 - macOS: Docker Desktop via Homebrew Cask
 
 ### 5. OS-Specific Firewall Configuration
 - **Files**:
-  - `roles/clawdbot/tasks/firewall.yml` (orchestrator)
-  - `roles/clawdbot/tasks/firewall-linux.yml` (UFW)
-  - `roles/clawdbot/tasks/firewall-macos.yml` (Application Firewall)
+  - `roles/openclaw/tasks/firewall.yml` (orchestrator)
+  - `roles/openclaw/tasks/firewall-linux.yml` (UFW)
+  - `roles/openclaw/tasks/firewall-macos.yml` (Application Firewall)
 - Linux: UFW with Docker isolation
 - macOS: Application Firewall configuration
 
 ### 6. DBus & systemd User Service Fixes
-- **File**: `roles/clawdbot/tasks/user.yml`
-- Fixed: `loginctl enable-linger` for clawdbot user
+- **File**: `roles/openclaw/tasks/user.yml`
+- Fixed: `loginctl enable-linger` for openclaw user
 - Fixed: XDG_RUNTIME_DIR set to `/run/user/$(id -u)`
 - Fixed: DBUS_SESSION_BUS_ADDRESS configuration in .bashrc
 - No more manual `eval $(dbus-launch --sh-syntax)` needed!
 
 ### 7. Systemd Service Template Enhancement
-- **File**: `roles/clawdbot/templates/clawdbot-host.service.j2`
+- **File**: `roles/openclaw/templates/openclaw-host.service.j2`
 - Added XDG_RUNTIME_DIR environment variable
 - Added DBUS_SESSION_BUS_ADDRESS
 - Added Homebrew to PATH
 - Enhanced security with ProtectSystem and ProtectHome
 
-### 8. Clawdbot Installation via pnpm
-- **File**: `roles/clawdbot/tasks/clawdbot.yml`
-- Changed from `pnpm add -g` to `pnpm install -g clawdbot@latest`
+### 8. OpenClaw Installation via pnpm
+- **File**: `roles/openclaw/tasks/openclaw.yml`
+- Changed from `pnpm add -g` to `pnpm install -g openclaw@latest`
 - Added verification step
 - Added version display
 
 ### 9. Correct User Switching Command
 - **File**: `run-playbook.sh`
-- Changed from `sudo -i -u clawdbot` to `sudo su - clawdbot`
-- Alternative: `sudo -u clawdbot -i`
+- Changed from `sudo -i -u openclaw` to `sudo su - openclaw`
+- Alternative: `sudo -u openclaw -i`
 - Ensures proper login shell with .bashrc loaded
 
 ### 10. Enhanced Welcome Message
 - **File**: `playbook.yml` (post_tasks)
-- Recommends: `clawdbot onboard --install-daemon` as first command
+- Recommends: `openclaw onboard --install-daemon` as first command
 - Shows environment status (XDG_RUNTIME_DIR, DBUS, Homebrew)
 - Provides both quick-start and manual setup paths
 - More helpful command examples
@@ -117,16 +117,16 @@ ansible-playbook playbook.yml --ask-become-pass \
 - Multi-OS badge (Debian | Ubuntu | macOS)
 - Updated features list
 - Added OS-specific requirements
-- Added post-install instructions with `clawdbot onboard --install-daemon`
+- Added post-install instructions with `openclaw onboard --install-daemon`
 
 ## 🎯 Key Improvements
 
 ### Fixed Issues from User History
 1. ✅ **DBus errors**: Automatically configured, no manual setup needed
-2. ✅ **User switching**: Correct command (`sudo su - clawdbot`)
+2. ✅ **User switching**: Correct command (`sudo su - openclaw`)
 3. ✅ **Environment**: XDG_RUNTIME_DIR and DBUS properly set
 4. ✅ **Homebrew**: Integrated and in PATH
-5. ✅ **pnpm**: Uses `pnpm install -g clawdbot@latest`
+5. ✅ **pnpm**: Uses `pnpm install -g openclaw@latest`
 
 ### OS Detection Framework
 - Clean separation between Linux and macOS tasks
@@ -135,7 +135,7 @@ ansible-playbook playbook.yml --ask-become-pass \
 
 ### Better User Experience
 - Clear next steps after installation
-- Recommends `clawdbot onboard --install-daemon`
+- Recommends `openclaw onboard --install-daemon`
 - Helpful welcome message with environment status
 - Proper shell initialization
 
@@ -149,7 +149,7 @@ If you have an existing installation, you may need to:
 echo 'export XDG_RUNTIME_DIR=/run/user/$(id -u)' >> ~/.bashrc
 
 # 2. Enable lingering
-sudo loginctl enable-linger clawdbot
+sudo loginctl enable-linger openclaw
 
 # 3. Add Homebrew to PATH (if using Linux)
 echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
@@ -157,8 +157,8 @@ echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
 # 4. Reload shell
 source ~/.bashrc
 
-# 5. Reinstall clawdbot
-pnpm install -g clawdbot@latest
+# 5. Reinstall openclaw
+pnpm install -g openclaw@latest
 ```
 
 ## 📝 TODO - Future macOS Enhancements
@@ -186,10 +186,10 @@ ansible-playbook playbook.yml --ask-become-pass --tags=never -vv
 # Test full installation
 ./run-playbook.sh
 
-# Verify clawdbot
-sudo su - clawdbot
-clawdbot --version
-clawdbot onboard --install-daemon
+# Verify openclaw
+sudo su - openclaw
+openclaw --version
+openclaw onboard --install-daemon
 ```
 
 ### macOS (Future)
@@ -203,7 +203,7 @@ clawdbot onboard --install-daemon
 ### Enhanced systemd Security
 - `ProtectSystem=strict`: Read-only system directories
 - `ProtectHome=read-only`: Limited home access
-- `ReadWritePaths`: Only ~/.clawdbot writable
+- `ReadWritePaths`: Only ~/.openclaw writable
 - `NoNewPrivileges`: Prevents privilege escalation
 
 ### DBus Session Security
@@ -218,17 +218,17 @@ clawdbot onboard --install-daemon
 - `install.sh` - Multi-OS detection
 - `run-playbook.sh` - Correct user switch command
 - `README.md` - Multi-OS documentation
-- `roles/clawdbot/defaults/main.yml` - OS-specific variables
-- `roles/clawdbot/tasks/*.yml` - OS-aware task orchestration
-- `roles/clawdbot/templates/clawdbot-host.service.j2` - Enhanced service
+- `roles/openclaw/defaults/main.yml` - OS-specific variables
+- `roles/openclaw/tasks/*.yml` - OS-aware task orchestration
+- `roles/openclaw/templates/openclaw-host.service.j2` - Enhanced service
 
 ### New Files Created
-- `roles/clawdbot/tasks/system-tools-linux.yml`
-- `roles/clawdbot/tasks/system-tools-macos.yml`
-- `roles/clawdbot/tasks/docker-linux.yml`
-- `roles/clawdbot/tasks/docker-macos.yml`
-- `roles/clawdbot/tasks/firewall-linux.yml`
-- `roles/clawdbot/tasks/firewall-macos.yml`
+- `roles/openclaw/tasks/system-tools-linux.yml`
+- `roles/openclaw/tasks/system-tools-macos.yml`
+- `roles/openclaw/tasks/docker-linux.yml`
+- `roles/openclaw/tasks/docker-macos.yml`
+- `roles/openclaw/tasks/firewall-linux.yml`
+- `roles/openclaw/tasks/firewall-macos.yml`
 - `UPGRADE_NOTES.md` (this file)
 
 ---

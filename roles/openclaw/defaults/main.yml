@@ -1,5 +1,5 @@
 ---
-# Clawdbot default variables
+# OpenClaw default variables
 
 # Tailscale settings
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
@@ -7,35 +7,35 @@ tailscale_authkey: ""  # Optional: set to auto-connect during installation
 # Node.js version
 nodejs_version: "22.x"
 
-# Clawdbot settings
-clawdbot_port: 3000
+# OpenClaw settings
+openclaw_port: 3000
 
-# Clawdbot config directory
-clawdbot_config_dir: "{{ clawdbot_home }}/.clawdbot"
+# OpenClaw config directory
+openclaw_config_dir: "{{ openclaw_home }}/.openclaw"
 
 # User settings (will be created as system user)
-clawdbot_user: clawdbot
-clawdbot_home: /home/clawdbot
+openclaw_user: openclaw
+openclaw_home: /home/openclaw
 
 # OS-specific settings (set dynamically in tasks)
 homebrew_prefix: "{{ '/opt/homebrew' if ansible_os_family == 'Darwin' else '/home/linuxbrew/.linuxbrew' }}"
 package_manager: "{{ 'brew' if ansible_os_family == 'Darwin' else 'apt' }}"
 
 # Installation mode: 'release' or 'development'
-# release: Install via pnpm install -g clawdbot@latest
+# release: Install via pnpm install -g openclaw@latest
 # development: Clone repo, build from source, link globally
-clawdbot_install_mode: "release"
+openclaw_install_mode: "release"
 
-# Development mode settings (only used when clawdbot_install_mode: development)
-clawdbot_repo_url: "https://github.com/clawdbot/clawdbot.git"
-clawdbot_repo_branch: "main"
-clawdbot_code_dir: "{{ clawdbot_home }}/code"
-clawdbot_repo_dir: "{{ clawdbot_code_dir }}/clawdbot"
+# Development mode settings (only used when openclaw_install_mode: development)
+openclaw_repo_url: "https://github.com/openclaw/openclaw.git"
+openclaw_repo_branch: "main"
+openclaw_code_dir: "{{ openclaw_home }}/code"
+openclaw_repo_dir: "{{ openclaw_code_dir }}/openclaw"
 
-# SSH keys for clawdbot user
-# Add your public SSH keys here to allow SSH access as clawdbot user
+# SSH keys for openclaw user
+# Add your public SSH keys here to allow SSH access as openclaw user
 # Example:
-#   clawdbot_ssh_keys:
+#   openclaw_ssh_keys:
 #     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx user@host"
 #     - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDxxxxxxxxxxxxxxxxxxxxxxx user@host"
-clawdbot_ssh_keys: []
+openclaw_ssh_keys: []

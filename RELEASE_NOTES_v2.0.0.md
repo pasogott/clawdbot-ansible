@@ -13,10 +13,10 @@ This release adds **multi-OS support** (macOS + Linux), **development mode**, an
 - ✅ Automatic OS detection with proper fallback
 
 #### Installation Modes
-- ✅ **Release Mode** (default): `pnpm install -g clawdbot@latest`
+- ✅ **Release Mode** (default): `pnpm install -g openclaw@latest`
 - ✅ **Development Mode**: Clone repo, build from source, symlink binary
-- ✅ Switch with `-e clawdbot_install_mode=development`
-- ✅ Development aliases: `clawdbot-rebuild`, `clawdbot-dev`, `clawdbot-pull`
+- ✅ Switch with `-e openclaw_install_mode=development`
+- ✅ Development aliases: `openclaw-rebuild`, `openclaw-dev`, `openclaw-pull`
 
 ### 🐛 Critical Bug Fixes
 
@@ -29,7 +29,7 @@ All issues from user feedback resolved:
    - No more manual `eval $(dbus-launch --sh-syntax)` needed!
 
 2. ✅ **User Switch Command**
-   - Fixed from `sudo -i -u clawdbot` to `sudo su - clawdbot`
+   - Fixed from `sudo -i -u openclaw` to `sudo su - openclaw`
    - Ensures proper login shell with environment
 
 3. ✅ **Homebrew Integration**
@@ -48,8 +48,8 @@ All issues from user feedback resolved:
 
 ### 🔧 Improvements
 
-- ✅ **Better onboarding**: Recommends `clawdbot onboard --install-daemon`
-- ✅ **No auto-config**: Config files created by clawdbot itself
+- ✅ **Better onboarding**: Recommends `openclaw onboard --install-daemon`
+- ✅ **No auto-config**: Config files created by openclaw itself
 - ✅ **Enhanced security**: systemd service hardening
 - ✅ **Linting**: yamllint & ansible-lint production profile passed
 
@@ -57,14 +57,14 @@ All issues from user feedback resolved:
 
 #### Quick Start (Release Mode)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/clawdbot/clawdbot-ansible/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-ansible/main/install.sh | bash
 ```
 
 #### Development Mode
 ```bash
-git clone https://github.com/clawdbot/clawdbot-ansible.git
-cd clawdbot-ansible
-./run-playbook.sh -e clawdbot_install_mode=development
+git clone https://github.com/openclaw/openclaw-ansible.git
+cd openclaw-ansible
+./run-playbook.sh -e openclaw_install_mode=development
 ```
 
 ### 📚 Documentation
@@ -76,8 +76,8 @@ cd clawdbot-ansible
 
 ### ⚠️ Breaking Changes
 
-1. **User switch command changed**: Use `sudo su - clawdbot` instead of `sudo -i -u clawdbot`
-2. **No auto-configuration**: Config files no longer auto-generated, use `clawdbot onboard`
+1. **User switch command changed**: Use `sudo su - openclaw` instead of `sudo -i -u openclaw`
+2. **No auto-configuration**: Config files no longer auto-generated, use `openclaw onboard`
 3. **No auto-service**: systemd service not auto-installed, use `--install-daemon` flag
 
 ### 🔄 Migration
@@ -89,7 +89,7 @@ echo 'export XDG_RUNTIME_DIR=/run/user/$(id -u)' >> ~/.bashrc
 echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.bashrc
 
 # Enable lingering
-sudo loginctl enable-linger clawdbot
+sudo loginctl enable-linger openclaw
 
 # Add Homebrew (Linux)
 echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
@@ -97,8 +97,8 @@ echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
 # Reload
 source ~/.bashrc
 
-# Reinstall clawdbot
-pnpm install -g clawdbot@latest
+# Reinstall openclaw
+pnpm install -g openclaw@latest
 ```
 
 ### 📊 Testing
@@ -115,4 +115,4 @@ Special thanks to early adopters who provided feedback on the DBus and user swit
 
 ---
 
-**Full Changelog**: https://github.com/clawdbot/clawdbot-ansible/blob/main/CHANGELOG.md
+**Full Changelog**: https://github.com/openclaw/openclaw-ansible/blob/main/CHANGELOG.md

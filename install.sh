@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Clawdbot Ansible Installer
-# This script installs Ansible if needed and runs the Clawdbot playbook
+# OpenClaw Ansible Installer
+# This script installs Ansible if needed and runs the OpenClaw playbook
 
 # Enable 256 colors
 export TERM=xterm-256color
@@ -12,7 +12,7 @@ if [ -z "$COLORTERM" ]; then
     export COLORTERM=truecolor
 fi
 
-REPO_URL="https://raw.githubusercontent.com/pasogott/clawdbot-ansible/main"
+REPO_URL="https://raw.githubusercontent.com/openclaw/openclaw-ansible/main"
 PLAYBOOK_URL="${REPO_URL}/playbook.yml"
 TEMP_DIR=$(mktemp -d)
 
@@ -26,7 +26,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║   Clawdbot Ansible Installer          ║${NC}"
+echo -e "${GREEN}║   OpenClaw Ansible Installer          ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -76,8 +76,8 @@ cd "$TEMP_DIR"
 
 # For simplicity, we'll clone the entire repo
 echo "Cloning repository..."
-git clone https://github.com/pasogott/clawdbot-ansible.git
-cd clawdbot-ansible
+git clone https://github.com/openclaw/openclaw-ansible.git
+cd openclaw-ansible
 
 echo -e "${GREEN}✓ Playbook downloaded${NC}"
 
@@ -97,4 +97,4 @@ echo ""
 cd /
 rm -rf "$TEMP_DIR"
 
-# run-playbook.sh will display instructions to switch to clawdbot user
+# run-playbook.sh will display instructions to switch to openclaw user

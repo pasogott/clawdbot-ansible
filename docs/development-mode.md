@@ -1,6 +1,6 @@
 # Development Mode Installation
 
-This guide explains how to install Clawdbot in **development mode**, where the application is built from source instead of installed from npm.
+This guide explains how to install OpenClaw in **development mode**, where the application is built from source instead of installed from npm.
 
 ## Overview
 
@@ -9,10 +9,10 @@ This guide explains how to install Clawdbot in **development mode**, where the a
 | Feature | Release Mode | Development Mode |
 |---------|-------------|------------------|
 | Source | npm registry | GitHub repository |
-| Installation | `pnpm install -g clawdbot@latest` | `git clone` + `pnpm build` |
-| Location | `~/.local/share/pnpm/global/...` | `~/code/clawdbot/` |
-| Binary | Global pnpm package | Symlink to `bin/clawdbot.js` |
-| Updates | `pnpm install -g clawdbot@latest` | `git pull` + `pnpm build` |
+| Installation | `pnpm install -g openclaw@latest` | `git clone` + `pnpm build` |
+| Location | `~/.local/share/pnpm/global/...` | `~/code/openclaw/` |
+| Binary | Global pnpm package | Symlink to `bin/openclaw.js` |
+| Updates | `pnpm install -g openclaw@latest` | `git pull` + `pnpm build` |
 | Use Case | Production, stable deployments | Development, testing, debugging |
 | Recommended For | End users | Developers, contributors |
 
@@ -22,11 +22,11 @@ This guide explains how to install Clawdbot in **development mode**, where the a
 
 ```bash
 # Clone the ansible installer
-git clone https://github.com/pasogott/clawdbot-ansible.git
-cd clawdbot-ansible
+git clone https://github.com/openclaw/openclaw-ansible.git
+cd openclaw-ansible
 
 # Run in development mode
-./run-playbook.sh -e clawdbot_install_mode=development
+./run-playbook.sh -e openclaw_install_mode=development
 ```
 
 ### Manual Install
@@ -36,14 +36,14 @@ cd clawdbot-ansible
 sudo apt update && sudo apt install -y ansible git
 
 # Clone repository
-git clone https://github.com/pasogott/clawdbot-ansible.git
-cd clawdbot-ansible
+git clone https://github.com/openclaw/openclaw-ansible.git
+cd openclaw-ansible
 
 # Install collections
 ansible-galaxy collection install -r requirements.yml
 
 # Run playbook with development mode
-ansible-playbook playbook.yml --ask-become-pass -e clawdbot_install_mode=development
+ansible-playbook playbook.yml --ask-become-pass -e openclaw_install_mode=development
 ```
 
 ## What Gets Installed
@@ -51,20 +51,20 @@ ansible-playbook playbook.yml --ask-become-pass -e clawdbot_install_mode=develop
 ### Directory Structure
 
 ```
-/home/clawdbot/
-├── .clawdbot/              # Configuration directory
+/home/openclaw/
+├── .openclaw/              # Configuration directory
 │   ├── sessions/
 │   ├── credentials/
 │   ├── data/
 │   └── logs/
 ├── .local/
 │   ├── bin/
-│   │   └── clawdbot       # Symlink -> ~/code/clawdbot/bin/clawdbot.js
+│   │   └── openclaw       # Symlink -> ~/code/openclaw/bin/openclaw.js
 │   └── share/pnpm/
 └── code/
-    └── clawdbot/          # Git repository
+    └── openclaw/          # Git repository
         ├── bin/
-        │   └── clawdbot.js
+        │   └── openclaw.js
         ├── dist/          # Built files
         ├── src/           # Source code
         ├── package.json
@@ -83,12 +83,12 @@ The Ansible playbook performs these steps:
 2. **Clone repository**
    ```bash
    cd ~/code
-   git clone https://github.com/clawdbot/clawdbot.git
+   git clone https://github.com/openclaw/openclaw.git
    ```
 
 3. **Install dependencies**
    ```bash
-   cd clawdbot
+   cd openclaw
    pnpm install
    ```
 
@@ -99,15 +99,15 @@ The Ansible playbook performs these steps:
 
 5. **Create symlink**
    ```bash
-   ln -sf ~/code/clawdbot/bin/clawdbot.js ~/.local/bin/clawdbot
-   chmod +x ~/code/clawdbot/bin/clawdbot.js
+   ln -sf ~/code/openclaw/bin/openclaw.js ~/.local/bin/openclaw
+   chmod +x ~/code/openclaw/bin/openclaw.js
    ```
 
 6. **Add development aliases** to `.bashrc`:
    ```bash
-   alias clawdbot-rebuild='cd ~/code/clawdbot && pnpm build'
-   alias clawdbot-dev='cd ~/code/clawdbot'
-   alias clawdbot-pull='cd ~/code/clawdbot && git pull && pnpm install && pnpm build'
+   alias openclaw-rebuild='cd ~/code/openclaw && pnpm build'
+   alias openclaw-dev='cd ~/code/openclaw'
+   alias openclaw-pull='cd ~/code/openclaw && git pull && pnpm install && pnpm build'
    ```
 
 ## Development Workflow
@@ -116,29 +116,29 @@ The Ansible playbook performs these steps:
 
 ```bash
 # 1. Navigate to repository
-clawdbot-dev
-# or: cd ~/code/clawdbot
+openclaw-dev
+# or: cd ~/code/openclaw
 
 # 2. Make your changes
 vim src/some-file.ts
 
 # 3. Rebuild
-clawdbot-rebuild
+openclaw-rebuild
 # or: pnpm build
 
 # 4. Test immediately
-clawdbot --version
-clawdbot doctor
+openclaw --version
+openclaw doctor
 ```
 
 ### Pulling Updates
 
 ```bash
 # Pull latest changes and rebuild
-clawdbot-pull
+openclaw-pull
 
 # Or manually:
-cd ~/code/clawdbot
+cd ~/code/openclaw
 git pull
 pnpm install
 pnpm build
@@ -147,18 +147,18 @@ pnpm build
 ### Testing Changes
 
 ```bash
-# After rebuilding, the clawdbot command uses the new code immediately
-clawdbot status
-clawdbot gateway
+# After rebuilding, the openclaw command uses the new code immediately
+openclaw status
+openclaw gateway
 
 # View daemon logs
-clawdbot logs
+openclaw logs
 ```
 
 ### Switching Branches
 
 ```bash
-cd ~/code/clawdbot
+cd ~/code/openclaw
 
 # Switch to feature branch
 git checkout feature-branch
@@ -177,14 +177,14 @@ The following aliases are added to `.bashrc`:
 
 | Alias | Command | Purpose |
 |-------|---------|---------|
-| `clawdbot-dev` | `cd ~/code/clawdbot` | Navigate to repo |
-| `clawdbot-rebuild` | `cd ~/code/clawdbot && pnpm build` | Rebuild after changes |
-| `clawdbot-pull` | `cd ~/code/clawdbot && git pull && pnpm install && pnpm build` | Update and rebuild |
+| `openclaw-dev` | `cd ~/code/openclaw` | Navigate to repo |
+| `openclaw-rebuild` | `cd ~/code/openclaw && pnpm build` | Rebuild after changes |
+| `openclaw-pull` | `cd ~/code/openclaw && git pull && pnpm install && pnpm build` | Update and rebuild |
 
 Plus an environment variable:
 
 ```bash
-export CLAWDBOT_DEV_DIR="$HOME/code/clawdbot"
+export OPENCLAW_DEV_DIR="$HOME/code/openclaw"
 ```
 
 ## Configuration Variables
@@ -193,28 +193,28 @@ You can customize the development installation:
 
 ```yaml
 # In playbook or command line
-clawdbot_install_mode: "development"
-clawdbot_repo_url: "https://github.com/clawdbot/clawdbot.git"
-clawdbot_repo_branch: "main"
-clawdbot_code_dir: "/home/clawdbot/code"
-clawdbot_repo_dir: "/home/clawdbot/code/clawdbot"
+openclaw_install_mode: "development"
+openclaw_repo_url: "https://github.com/openclaw/openclaw.git"
+openclaw_repo_branch: "main"
+openclaw_code_dir: "/home/openclaw/code"
+openclaw_repo_dir: "/home/openclaw/code/openclaw"
 ```
 
 ### Using a Fork
 
 ```bash
 ansible-playbook playbook.yml --ask-become-pass \
-  -e clawdbot_install_mode=development \
-  -e clawdbot_repo_url=https://github.com/YOUR_USERNAME/clawdbot.git \
-  -e clawdbot_repo_branch=your-feature-branch
+  -e openclaw_install_mode=development \
+  -e openclaw_repo_url=https://github.com/YOUR_USERNAME/openclaw.git \
+  -e openclaw_repo_branch=your-feature-branch
 ```
 
 ### Custom Location
 
 ```bash
 ansible-playbook playbook.yml --ask-become-pass \
-  -e clawdbot_install_mode=development \
-  -e clawdbot_code_dir=/home/clawdbot/projects
+  -e openclaw_install_mode=development \
+  -e openclaw_code_dir=/home/openclaw/projects
 ```
 
 ## Switching Between Modes
@@ -223,23 +223,23 @@ ansible-playbook playbook.yml --ask-become-pass \
 
 ```bash
 # Uninstall global package
-pnpm uninstall -g clawdbot
+pnpm uninstall -g openclaw
 
 # Run ansible in development mode
-ansible-playbook playbook.yml --ask-become-pass -e clawdbot_install_mode=development
+ansible-playbook playbook.yml --ask-become-pass -e openclaw_install_mode=development
 ```
 
 ### From Development to Release
 
 ```bash
 # Remove symlink
-rm ~/.local/bin/clawdbot
+rm ~/.local/bin/openclaw
 
 # Remove repository (optional)
-rm -rf ~/code/clawdbot
+rm -rf ~/code/openclaw
 
 # Install from npm
-pnpm install -g clawdbot@latest
+pnpm install -g openclaw@latest
 ```
 
 ## Troubleshooting
@@ -247,7 +247,7 @@ pnpm install -g clawdbot@latest
 ### Build Fails
 
 ```bash
-cd ~/code/clawdbot
+cd ~/code/openclaw
 
 # Check Node.js version (needs 22.x)
 node --version
@@ -262,12 +262,12 @@ pnpm build
 
 ```bash
 # Check symlink
-ls -la ~/.local/bin/clawdbot
+ls -la ~/.local/bin/openclaw
 
 # Recreate symlink
-rm ~/.local/bin/clawdbot
-ln -sf ~/code/clawdbot/bin/clawdbot.js ~/.local/bin/clawdbot
-chmod +x ~/code/clawdbot/bin/clawdbot.js
+rm ~/.local/bin/openclaw
+ln -sf ~/code/openclaw/bin/openclaw.js ~/.local/bin/openclaw
+chmod +x ~/code/openclaw/bin/openclaw.js
 ```
 
 ### Command Not Found
@@ -281,7 +281,7 @@ source ~/.bashrc
 ### Git Issues
 
 ```bash
-cd ~/code/clawdbot
+cd ~/code/openclaw
 
 # Reset to clean state
 git reset --hard origin/main
@@ -324,23 +324,23 @@ No difference in runtime memory usage between modes.
 
 ```bash
 # Test specific commit
-cd ~/code/clawdbot
+cd ~/code/openclaw
 git fetch origin pull/123/head:pr-123
 git checkout pr-123
 pnpm install
 pnpm build
 
 # Test it
-clawdbot doctor
+openclaw doctor
 ```
 
 ### Automated Testing
 
 ```bash
 #!/bin/bash
-# test-clawdbot.sh
+# test-openclaw.sh
 
-cd ~/code/clawdbot
+cd ~/code/openclaw
 git pull
 pnpm install
 pnpm build
@@ -349,7 +349,7 @@ pnpm build
 pnpm test
 
 # Integration test
-clawdbot doctor
+openclaw doctor
 ```
 
 ## Best Practices
@@ -358,12 +358,12 @@ clawdbot doctor
 
 1. ✅ **Always rebuild after code changes**
    ```bash
-   clawdbot-rebuild
+   openclaw-rebuild
    ```
 
 2. ✅ **Test changes before committing**
    ```bash
-   pnpm build && clawdbot doctor
+   pnpm build && openclaw doctor
    ```
 
 3. ✅ **Keep dependencies updated**
@@ -392,19 +392,19 @@ You can have multiple clones:
 
 ```bash
 # Main development
-~/code/clawdbot/          # main branch
+~/code/openclaw/          # main branch
 
 # Experimental features
-~/code/clawdbot-test/     # testing branch
+~/code/openclaw-test/     # testing branch
 
 # Switch binary symlink
-ln -sf ~/code/clawdbot-test/bin/clawdbot.js ~/.local/bin/clawdbot
+ln -sf ~/code/openclaw-test/bin/openclaw.js ~/.local/bin/openclaw
 ```
 
 ### Custom Build Options
 
 ```bash
-cd ~/code/clawdbot
+cd ~/code/openclaw
 
 # Development build (faster, includes source maps)
 NODE_ENV=development pnpm build
@@ -417,10 +417,10 @@ NODE_ENV=production pnpm build
 
 ```bash
 # Run with debug output
-DEBUG=* clawdbot gateway
+DEBUG=* openclaw gateway
 
 # Or specific namespaces
-DEBUG=clawdbot:* clawdbot gateway
+DEBUG=openclaw:* openclaw gateway
 ```
 
 ## See Also
@@ -428,4 +428,4 @@ DEBUG=clawdbot:* clawdbot gateway
 - [Main README](../README.md)
 - [Security Architecture](security.md)
 - [Troubleshooting Guide](troubleshooting.md)
-- [Clawdbot Repository](https://github.com/clawdbot/clawdbot)
+- [OpenClaw Repository](https://github.com/openclaw/openclaw)
