@@ -3,3 +3,8 @@
   ansible.builtin.systemd:
     name: docker
     state: restarted
+
+- name: Restart fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: restarted

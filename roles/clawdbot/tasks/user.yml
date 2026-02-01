@@ -9,15 +9,27 @@
     home: /home/clawdbot
     state: present
 
-- name: Add clawdbot user to sudoers with NOPASSWD
+- name: Add clawdbot user to sudoers with scoped NOPASSWD
   ansible.builtin.copy:
     dest: /etc/sudoers.d/clawdbot
     mode: '0440'
     owner: root
     group: root
     content: |
-      # Allow clawdbot user to run sudo without password
-      clawdbot ALL=(ALL) NOPASSWD: ALL
+      # Clawdbot service management (scoped permissions)
+      # Service control - only clawdbot service
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl start clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl status clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable clawdbot
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+      # Tailscale VPN management
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
+      clawdbot ALL=(ALL) NOPASSWD: /usr/sbin/tailscale *
+      # Journal access for log viewing
+      clawdbot ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u clawdbot *
     validate: /usr/sbin/visudo -cf %s
 
 - name: Set clawdbot user as primary user for installation

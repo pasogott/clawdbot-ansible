@@ -134,6 +134,15 @@ requirements.yml # Ansible Galaxy collections
 ### Why UFW + DOCKER-USER?
 Docker bypasses UFW by default. DOCKER-USER chain is evaluated first, allowing us to block before Docker sees the traffic.
 
+### Why Fail2ban?
+SSH is exposed to the internet. Fail2ban automatically bans IPs after 5 failed attempts for 1 hour.
+
+### Why Unattended-Upgrades?
+Security patches should be applied promptly. Automatic security-only updates reduce vulnerability windows.
+
+### Why Scoped Sudo?
+The clawdbot user only needs to manage its own service and Tailscale. Full root access would be dangerous if the app is compromised.
+
 ### Why Localhost Binding?
 Defense in depth. If DOCKER-USER fails, localhost binding prevents external access.
 
@@ -142,6 +151,11 @@ Least privilege. Limits damage if container is compromised.
 
 ### Why Systemd?
 Clean lifecycle, auto-start, logging integration.
+
+### Known Limitations
+- **macOS**: Incomplete support (no launchd, basic firewall). Test thoroughly.
+- **IPv6**: Disabled in Docker. Review if your network uses IPv6.
+- **curl | bash**: Inherent risks. For production, clone and audit first.
 
 ## Making Changes
 

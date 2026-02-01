@@ -1,5 +1,5 @@
 [Unit]
-Description=Clawdbot WhatsApp Gateway
+Description=Clawdbot AI Gateway
 After=network.target docker.service
 Requires=docker.service
 
@@ -13,10 +13,10 @@ WorkingDirectory={{ clawdbot_home }}
 Environment="PATH={{ clawdbot_home }}/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PNPM_HOME={{ clawdbot_home }}/.local/share/pnpm"
 Environment="HOME={{ clawdbot_home }}"
-Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="XDG_RUNTIME_DIR=/run/user/{{ clawdbot_uid_value | default('1000') }}"
 
 # DBus session bus
-Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ clawdbot_uid_value | default('1000') }}/bus"
 
 # Start command
 ExecStart={{ clawdbot_home }}/.local/bin/clawdbot gateway
@@ -31,6 +31,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths={{ clawdbot_home }}/.clawdbot
+ReadWritePaths={{ clawdbot_home }}/.local
 
 # Logging
 StandardOutput=journal

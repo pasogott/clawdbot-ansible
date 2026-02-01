@@ -10,10 +10,12 @@ Automated, hardened installation of [Clawdbot](https://github.com/clawdbot/clawd
 ## Features
 
 - 🔒 **Firewall-first**: UFW (Linux) + Application Firewall (macOS) + Docker isolation
+- 🛡️ **Fail2ban**: SSH brute-force protection out of the box
+- 🔄 **Auto-updates**: Automatic security patches via unattended-upgrades
 - 🔐 **Tailscale VPN**: Secure remote access without exposing services
 - 🍺 **Homebrew**: Package manager for both Linux and macOS
 - 🐳 **Docker**: Docker CE (Linux) / Docker Desktop (macOS)
-- 🛡️ **Multi-OS Support**: Debian, Ubuntu, and macOS
+- 🌐 **Multi-OS Support**: Debian, Ubuntu, and macOS
 - 🚀 **One-command install**: Complete setup in minutes
 - 🔧 **Auto-configuration**: DBus, systemd, environment setup
 - 📦 **pnpm installation**: Uses `pnpm install -g clawdbot@latest`
@@ -113,12 +115,26 @@ Enable with: `-e clawdbot_install_mode=development`
 ## Security
 
 - **Public ports**: SSH (22), Tailscale (41641/udp) only
-- **Docker available**: For Clawdbot sandboxes (isolated execution)
+- **Fail2ban**: SSH brute-force protection (5 attempts → 1 hour ban)
+- **Automatic updates**: Security patches via unattended-upgrades
 - **Docker isolation**: Containers can't expose ports externally (DOCKER-USER chain)
 - **Non-root**: Clawdbot runs as unprivileged user
-- **Systemd hardening**: NoNewPrivileges, PrivateTmp
+- **Scoped sudo**: Limited to service management (not full root)
+- **Systemd hardening**: NoNewPrivileges, PrivateTmp, ProtectSystem
 
 Verify: `nmap -p- YOUR_SERVER_IP` should show only port 22 open.
+
+### Security Note
+
+For high-security environments, audit before running:
+
+```bash
+git clone https://github.com/openclaw/clawdbot-ansible.git
+cd clawdbot-ansible
+# Review playbook.yml and roles/
+ansible-playbook playbook.yml --check --diff  # Dry run
+ansible-playbook playbook.yml --ask-become-pass
+```
 
 ## Documentation
 
