@@ -109,7 +109,7 @@
 
 # Fix DBus issues for systemd user services
 - name: Get openclaw user ID
-  ansible.builtin.command: id -u openclaw
+  ansible.builtin.command: "id -u {{ openclaw_user }}"
   register: openclaw_uid
   changed_when: false
   when: ansible_os_family == 'Debian' and not ci_test
@@ -120,7 +120,7 @@
   when: ansible_os_family == 'Debian' and not ci_test
 
 - name: Enable lingering for openclaw user (allows systemd user services without login)
-  ansible.builtin.command: loginctl enable-linger openclaw
+  ansible.builtin.command: "loginctl enable-linger {{ openclaw_user }}"
   changed_when: false
   when: ansible_os_family == 'Debian' and not ci_test
 
