@@ -86,7 +86,7 @@
       "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
 
       # Journal access - openclaw logs only
-      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u "{{ openclaw_user }}" *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
     validate: /usr/sbin/visudo -cf %s
 
 - name: Set openclaw user as primary user for installation
