@@ -90,9 +90,9 @@
 
     - name: Create one-time welcome message for openclaw user
       ansible.builtin.copy:
-        dest: /home/openclaw/.openclaw-welcome
-        owner: openclaw
-        group: openclaw
+        dest: "{{ openclaw_home }}/.openclaw-welcome"
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_user }}"
         mode: '0644'
         content: |
           echo ""
@@ -168,7 +168,7 @@
 
     - name: Add welcome message to .bashrc
       ansible.builtin.lineinfile:
-        path: /home/openclaw/.bashrc
+        path: "{{ openclaw_home }}/.bashrc"
         line: '[ -f ~/.openclaw-welcome ] && source ~/.openclaw-welcome'
         state: present
         insertafter: EOF

@@ -1,43 +1,12 @@
 #!/bin/bash
-set -e
+
+# Accept variables with fallbacks
+openclaw_user="${1:-openclaw}"
+openclaw_home="${2:-/home/openclaw}"
 
 # Enable 256 colors
 export TERM=xterm-256color
 export COLORTERM=truecolor
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-# OpenClaw ASCII Art Lobster
-cat << 'LOBSTER'
-[0;36m
-   +====================================================+
-   |                                                    |
-   |         [0;33mWelcome to OpenClaw! [0;31m🦞[0;36m                    |
-   |                                                    |
-   |[0;31m                   ,.---._                         [0;36m|
-   |[0;31m               ,,,,     /       `,                 [0;36m|
-   |[0;31m                \\\\\\   /    '\_  ;                [0;36m|
-   |[0;31m                 |||| /\/``-.__\;'                 [0;36m|
-   |[0;31m                 ::::/\/_                          [0;36m|
-   |[0;31m {{`-.__.-'(`(^^(^^^(^ 9 `.========='              [0;36m|
-   |[0;31m{{{{{{ { ( ( (  (   (-----:=                      [0;36m|
-   |[0;31m {{.-'~~'-.(,(,,(,,,(__6_.'=========.              [0;36m|
-   |[0;31m                 ::::\/\                           [0;36m|
-   |[0;31m                 |||| \/\  ,-'/,                   [0;36m|
-   |[0;31m                ////   \ `` _/ ;                   [0;36m|
-   |[0;31m               ''''     \  `  .'                   [0;36m|
-   |[0;31m                         `---'                     [0;36m|
-   |                                                    |
-   |           [0;32m✅  Installation Successful![0;36m             |
-   |                                                    |
-   +====================================================+[0m
-LOBSTER
 
 echo ""
 echo -e "${GREEN}🔒 Security Status:${NC}"
@@ -49,12 +18,12 @@ echo -e "📚 Documentation: ${GREEN}https://docs.openclaw.ai${NC}"
 echo ""
 
 # Switch to openclaw user for setup
-echo -e "${YELLOW}Switching to openclaw user for setup...${NC}"
+echo -e "${YELLOW}Switching to ${openclaw_user} user for setup...${NC}"
 echo ""
 echo "DEBUG: About to create init script..."
 
 # Create init script that will be sourced on login
-cat > /home/openclaw/.openclaw-init << 'INIT_EOF'
+cat > "${openclaw_home}/.openclaw-init" << 'INIT_EOF'
 # Display welcome message
 echo "============================================"
 echo "📋 OpenClaw Setup - Next Steps"
@@ -92,15 +61,15 @@ echo ""
 rm -f ~/.openclaw-init
 INIT_EOF
 
-chown openclaw:openclaw /home/openclaw/.openclaw-init
+chown "${openclaw_user}:${openclaw_user}" "${openclaw_home}/.openclaw-init"
 
 # Add one-time sourcing to .bashrc if not already there
-grep -q '.openclaw-init' /home/openclaw/.bashrc 2>/dev/null || {
-    echo '' >> /home/openclaw/.bashrc
-    echo '# One-time setup message' >> /home/openclaw/.bashrc
-    echo '[ -f ~/.openclaw-init ] && source ~/.openclaw-init' >> /home/openclaw/.bashrc
+grep -q '.openclaw-init' "${openclaw_home}/.bashrc" 2>/dev/null || {
+    echo '' >> "${openclaw_home}/.bashrc"
+    echo '# One-time setup message' >> "${openclaw_home}/.bashrc"
+    echo '[ -f ~/.openclaw-init ] && source ~/.openclaw-init' >> "${openclaw_home}/.bashrc"
 }
 
 # Switch to openclaw user with explicit interactive shell
 # Using setsid to create new session + force pseudo-terminal allocation
-exec sudo -i -u openclaw /bin/bash --login
+exec sudo -i -u "${openclaw_user}" /bin/bash --login
