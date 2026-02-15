@@ -1,12 +1,12 @@
 ---
 - name: Create openclaw system user
   ansible.builtin.user:
-    name: openclaw
+    name: "{{ openclaw_user }}"
     comment: "OpenClaw Service User"
     system: true
     shell: /bin/bash
     create_home: true
-    home: /home/openclaw
+    home: "{{ openclaw_home }}"
     state: present
 
 - name: Ensure openclaw home directory has correct ownership
@@ -45,7 +45,7 @@
 
 - name: Add openclaw user to sudoers with scoped NOPASSWD
   ansible.builtin.copy:
-    dest: /etc/sudoers.d/openclaw
+    dest: "/etc/sudoers.d/{{ openclaw_user }}"
     mode: '0440'
     owner: root
     group: root
@@ -59,40 +59,40 @@
       # - View openclaw logs
       #
       # To grant full tailscale control (e.g., for self-healing VPN):
-      #   openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
+      #   "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
       #
       # To grant full sudo (NOT RECOMMENDED):
-      #   openclaw ALL=(ALL) NOPASSWD: ALL
+      #   "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: ALL
 
       # Service control - openclaw service only
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl start openclaw
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop openclaw
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart openclaw
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl status openclaw
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable openclaw
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl start openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl status openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable openclaw
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable openclaw
       # daemon-reload affects all units (required after service file changes)
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 
       # Tailscale - diagnostics + connect/disconnect
       # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
       # remove 'up' and 'down' lines - operator must then manage VPN manually.
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
 
       # Journal access - openclaw logs only
-      openclaw ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
+      "{{ openclaw_user }}" ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
     validate: /usr/sbin/visudo -cf %s
 
 - name: Set openclaw user as primary user for installation
   ansible.builtin.set_fact:
-    openclaw_user: openclaw
-    openclaw_home: /home/openclaw
+    openclaw_user: "{{ openclaw_user }}"
+    openclaw_home: "{{ openclaw_home }}"
 
 - name: Create .bash_profile to source .bashrc for login shells
   ansible.builtin.copy:
@@ -128,8 +128,8 @@
   ansible.builtin.file:
     path: "/run/user/{{ openclaw_uid.stdout }}"
     state: directory
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0700'
   when: ansible_os_family == 'Debian' and not ci_test
 
@@ -143,13 +143,13 @@
   ansible.builtin.file:
     path: "{{ openclaw_home }}/.ssh"
     state: directory
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0700'
 
 - name: Add SSH authorized keys for openclaw user
   ansible.posix.authorized_key:
-    user: openclaw
+    user: "{{ openclaw_user }}"
     state: present
     key: "{{ item }}"
   loop: "{{ openclaw_ssh_keys }}"
@@ -167,18 +167,18 @@
 
 - name: Set XDG_RUNTIME_DIR in .bashrc for openclaw user
   ansible.builtin.lineinfile:
-    path: /home/openclaw/.bashrc
+    path: "{{ openclaw_home }}/.bashrc"
     line: 'export XDG_RUNTIME_DIR=/run/user/$(id -u)'
     state: present
     create: true
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0644'
   when: ansible_os_family == 'Debian' and not ci_test
 
 - name: Set DBUS_SESSION_BUS_ADDRESS in .bashrc for openclaw user
   ansible.builtin.blockinfile:
-    path: /home/openclaw/.bashrc
+    path: "{{ openclaw_home }}/.bashrc"
     marker: "# {mark} ANSIBLE MANAGED BLOCK - DBus config"
     block: |
       # DBus session bus configuration
@@ -188,7 +188,7 @@
         fi
       fi
     create: true
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: '0644'
   when: ansible_os_family == 'Debian' and not ci_test
