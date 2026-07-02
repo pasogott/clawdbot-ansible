@@ -56,7 +56,7 @@
 
 - name: Join Tailnet with auth key (Linux)
   ansible.builtin.command:
-    cmd: "tailscale up --authkey {{ tailscale_authkey }}"
+    cmd: "tailscale up{% if tailscale_ssh | bool %} --ssh{% endif %} --authkey {{ tailscale_authkey }}"
   when:
     - not tailscale_connected
     - tailscale_authkey | length > 0

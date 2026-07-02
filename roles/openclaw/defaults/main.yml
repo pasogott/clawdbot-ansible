@@ -8,6 +8,7 @@ ci_test: false
 # WARNING: Tasks using tailscale_authkey MUST set no_log: true to prevent credential exposure
 tailscale_enabled: false  # Set to true to install and configure Tailscale
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
+tailscale_ssh: true  # Enable Tailscale SSH (tailscale up --ssh) when joining the tailnet
 
 # Node.js version
 nodejs_version: "22.x"
