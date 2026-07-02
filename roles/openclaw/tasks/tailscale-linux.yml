@@ -44,7 +44,26 @@
   changed_when: false
   failed_when: false
 
-- name: Display Tailscale auth URL if not connected (Linux)
+# `tailscale status --json` exits 0 whenever tailscaled is reachable, even in
+# NeedsLogin/Stopped states, so the exit code alone can't tell us if the node
+# is joined. Parse BackendState instead.
+- name: Determine whether Tailscale is connected (Linux)
+  ansible.builtin.set_fact:
+    tailscale_connected: >-
+      {{ tailscale_status_linux.rc == 0
+         and tailscale_status_linux.stdout | length > 0
+         and (tailscale_status_linux.stdout | from_json).BackendState == 'Running' }}
+
+- name: Join Tailnet with auth key (Linux)
+  ansible.builtin.command:
+    cmd: "tailscale up --authkey {{ tailscale_authkey }}"
+  when:
+    - not tailscale_connected
+    - tailscale_authkey | length > 0
+  no_log: true
+  changed_when: true
+
+- name: Display Tailscale auth URL if not connected and no auth key provided (Linux)
   ansible.builtin.debug:
     msg:
       - "============================================"
@@ -58,4 +77,6 @@
       - "sudo tailscale up --authkey tskey-auth-xxxxx"
       - ""
       - "Get auth key from: https://login.tailscale.com/admin/settings/keys"
-  when: tailscale_status_linux.rc != 0
+  when:
+    - not tailscale_connected
+    - tailscale_authkey | length == 0
