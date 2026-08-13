@@ -1,0 +1,72 @@
+---
+- name: Verify Docker group privilege migration
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+
+  vars:
+    openclaw_user: openclaw-security-test
+    openclaw_test_extra_group: openclaw-test-extra
+
+  tasks:
+    - name: Create test groups
+      ansible.builtin.group:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - docker
+        - "{{ openclaw_test_extra_group }}"
+
+    - name: Create intentionally overprivileged service user fixture
+      ansible.builtin.user:
+        name: "{{ openclaw_user }}"
+        groups:
+          - docker
+          - "{{ openclaw_test_extra_group }}"
+        append: true
+        create_home: false
+        system: true
+
+    - name: Read fixture group memberships
+      ansible.builtin.command:
+        argv:
+          - id
+          - -nG
+          - "{{ openclaw_user }}"
+      register: openclaw_groups_before
+      changed_when: false
+
+    - name: Assert vulnerable fixture and unrelated group are present
+      ansible.builtin.assert:
+        that:
+          - "'docker' in openclaw_groups_before.stdout.split()"
+          - "openclaw_test_extra_group in openclaw_groups_before.stdout.split()"
+
+    - name: Apply production Docker service-account hardening
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: docker-security
+
+    - name: Read migrated group memberships
+      ansible.builtin.command:
+        argv:
+          - id
+          - -nG
+          - "{{ openclaw_user }}"
+      register: openclaw_groups_after
+      changed_when: false
+
+    - name: Assert Docker access is removed without disturbing other groups
+      ansible.builtin.assert:
+        that:
+          - "'docker' not in openclaw_groups_after.stdout.split()"
+          - "openclaw_test_extra_group in openclaw_groups_after.stdout.split()"
+        success_msg: >-
+          The service user cannot access the rootful Docker daemon and retains
+          unrelated supplementary groups.
+
+    - name: Reapply Docker service-account hardening
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: docker-security

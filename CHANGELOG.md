@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Remove the OpenClaw service user from the root-equivalent Docker group, including on existing installations. Thanks @Tonynanra for the report.
 - Document expected results for post-install security verification and link the checks from setup documentation. Thanks @justinfiore for the report.
 
 ## [2.0.0] - 2025-01-09

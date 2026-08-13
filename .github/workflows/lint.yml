@@ -46,7 +46,7 @@ jobs:
         run: ansible-galaxy collection install -r requirements.yml
 
       - name: Run ansible-lint
-        run: ansible-lint playbook.yml
+        run: ansible-lint playbook.yml tests/docker-group-security.yml
 
   syntax-check:
     name: Ansible Syntax Check
@@ -67,4 +67,24 @@ jobs:
         run: ansible-galaxy collection install -r requirements.yml
 
       - name: Ansible syntax check
-        run: ansible-playbook playbook.yml --syntax-check
+        run: |
+          ansible-playbook playbook.yml --syntax-check
+          ansible-playbook tests/docker-group-security.yml --syntax-check
+
+  docker-group-security:
+    name: Docker Group Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: python -m pip install -r requirements-lint.txt
+
+      - name: Verify service-user Docker access is removed
+        run: ansible-playbook tests/docker-group-security.yml

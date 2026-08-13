@@ -250,6 +250,7 @@ Enable with: `-e openclaw_install_mode=development`
 - **Automatic updates**: Security patches via unattended-upgrades
 - **Docker isolation**: Containers can't expose ports externally (DOCKER-USER chain)
 - **Non-root**: OpenClaw runs as unprivileged user
+- **No Docker socket access**: The OpenClaw user is excluded from the root-equivalent `docker` group
 - **Scoped sudo**: Limited to service management (not full root)
 - **Systemd hardening**: NoNewPrivileges, PrivateTmp, ProtectSystem
 

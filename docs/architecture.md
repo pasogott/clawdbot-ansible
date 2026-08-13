@@ -73,7 +73,7 @@ systemd → docker compose → openclaw container
 
 3. **Docker Installation** (`docker.yml`)
    - Install Docker CE + Compose V2
-   - Add user to docker group
+   - Keep the OpenClaw service user out of the root-equivalent Docker group
    - Create `/etc/docker` directory
 
 4. **Firewall Setup** (`firewall.yml`)

@@ -1,0 +1,20 @@
+---
+# The rootful Docker socket grants host-root-equivalent control. OpenClaw runs
+# on the host and does not need daemon access, so remove the legacy grant while
+# preserving every unrelated supplementary group an operator may have added.
+- name: Read Docker group membership
+  ansible.builtin.getent:
+    database: group
+    key: docker
+
+- name: Remove OpenClaw service user from root-equivalent Docker group
+  ansible.builtin.command:
+    argv:
+      - gpasswd
+      - --delete
+      - "{{ openclaw_user }}"
+      - docker
+  changed_when: true
+  when: >-
+    openclaw_user in
+    (ansible_facts.getent_group['docker'][2].split(',') | reject('equalto', '') | list)

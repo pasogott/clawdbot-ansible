@@ -91,6 +91,11 @@ The openclaw user has limited sudo permissions (not full root):
 - journalctl for openclaw logs
 ```
 
+The user is deliberately excluded from the `docker` group. Membership would
+grant root-equivalent control through the rootful Docker daemon and bypass the
+scoped sudo boundary. Reapplying the playbook also removes this legacy grant
+from existing installations without changing other supplementary groups.
+
 ### Layer 8: Automatic Security Updates
 
 Unattended-upgrades is configured for automatic security patches:
@@ -144,6 +149,15 @@ sudo iptables -L DOCKER-USER -n -v
 ```
 
 Expected: the chain includes accepts for established traffic and loopback traffic, followed by a drop rule for traffic arriving on the server's default external interface. Packet counters may be zero before traffic reaches the chain.
+
+Verify that the OpenClaw service account cannot access the Docker socket:
+
+```bash
+id -nG openclaw
+```
+
+Expected: the output does not include `docker`. Operators should use `sudo
+docker ...` for explicit container administration.
 
 From another machine, scan the server:
 
@@ -229,6 +243,7 @@ After installation, verify:
 - [ ] `sudo ufw status` shows only SSH and Tailscale allowed
 - [ ] `sudo fail2ban-client status sshd` shows jail active
 - [ ] `sudo iptables -L DOCKER-USER -n` shows DROP rule
+- [ ] `id -nG openclaw` does not include the `docker` group
 - [ ] `nmap -p- YOUR_IP` from external shows only port 22
 - [ ] `docker run -p 80:80 nginx` + `curl YOUR_IP:80` times out
 - [ ] Tailscale access works for web UI
