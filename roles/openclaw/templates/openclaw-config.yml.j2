@@ -24,18 +24,41 @@ signal:
 
 # AI Model Configuration
 ai:
-  # Model provider: anthropic, openai
+  # Model provider: anthropic, openai, minimax
   provider: anthropic
 
   # API Keys (set as environment variables or here)
   # anthropic_api_key: ""
   # openai_api_key: ""
+  # minimax_api_key: ""
 
   # Model selection
   model: claude-3-5-sonnet-20241022
+  # MiniMax models: MiniMax-M3, MiniMax-M2.7
+  # model: MiniMax-M3
 
   # Max tokens per response
   max_tokens: 4096
+
+# MiniMax Provider Configuration (if using ai.provider: minimax)
+# MiniMax exposes both OpenAI- and Anthropic-compatible endpoints, with a
+# global (api.minimax.io) and a China (api.minimaxi.com) region.
+minimax:
+  # Regional endpoints: global_en or cn_zh
+  region: global_en
+
+  # Base URLs per region (defaults shown for global_en)
+  # global_en:
+  #   openai_base_url: https://api.minimax.io/v1
+  #   anthropic_base_url: https://api.minimax.io/anthropic
+  # cn_zh:
+  #   openai_base_url: https://api.minimaxi.com/v1
+  #   anthropic_base_url: https://api.minimaxi.com/anthropic
+  openai_base_url: https://api.minimax.io/v1
+  anthropic_base_url: https://api.minimax.io/anthropic
+
+  # Model context window (tokens)
+  context_window: 1000000
 
 # Gateway Settings
 gateway:

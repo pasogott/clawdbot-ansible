@@ -59,8 +59,8 @@ sudo nano /home/openclaw/.openclaw/config.yml
 # Key settings to configure:
 # - provider: whatsapp/telegram/signal
 # - phone: your number
-# - ai.provider: anthropic/openai
-# - ai.model: claude-3-5-sonnet-20241022
+# - ai.provider: anthropic/openai/minimax
+# - ai.model: claude-3-5-sonnet-20241022 / MiniMax-M3 / MiniMax-M2.7
 ```
 
 ### 3. Login to Provider
