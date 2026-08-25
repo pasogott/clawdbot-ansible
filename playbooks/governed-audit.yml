@@ -160,3 +160,19 @@
         tasks_from: doctor_audit
   tags:
     - doctor
+
+# TASK-225 criterion 1. Zero mutation: reads the live schema and the effective
+# config, then adjudicates every recorded control-surface map row against them.
+# Conflicts are PRESERVED, not reconciled -- the task states that rule explicitly,
+# so this play reports them and does not fail on them.
+- name: Re-read the control-surface map against the live schema
+  hosts: "{{ dc_target | default('openclaw_hosts') }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Adjudicate every map row
+      ansible.builtin.include_role:
+        name: dc-governed-config
+        tasks_from: schema_evidence
+  tags:
+    - schema-evidence

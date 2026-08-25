@@ -1355,3 +1355,199 @@ dc_doctor_timeout: 120
 dc_doctor_report: >-
   /tmp/openclaw-doctor-{{
      ansible_facts['date_time'].iso8601_basic_short | default('run') }}.txt
+
+# --- TASK-225 criterion 1: control-surface map vs live schema ------------------
+#
+# The recorded control-surface map states, per subsystem, which layer enforces it
+# and whether a PER-AGENT narrowing exists. Most rows carry "VERIFIED UPSTREAM
+# v2026.7.1; HOST REVALIDATION REQUIRED". Criterion 1 is that revalidation.
+#
+# THESE ROWS ARE GOVERNANCE CONTENT, NOT TUNING. Each one restates a claim
+# already accepted on canonical TASK-225. Editing a claim here to make a verdict
+# come out CONFIRMED is reconciling by assumption, which criterion 1 explicitly
+# prohibits. The correct response to a CONFLICT is to revise the canonical row
+# against the evidence -- a human act, recorded on the task.
+#
+# `agent_markers` are the key-name fragments that identify this family's
+# per-agent surface. They decide what counts as "a per-agent narrowing exists",
+# so a marker list that is too narrow manufactures an OVERSTATED conflict and one
+# that is too broad manufactures a CONFIRMED. They are listed explicitly rather
+# than inferred for exactly that reason: the matching rule has to be reviewable.
+dc_schema_surface_rows:
+  - subsystem: "Plugins"
+    roots: ["plugins"]
+    agent_markers: ["plugin"]
+    agent_scoped_claim: "no"
+    map_note: >-
+      NO for plugin loading. Agent tool policy may hide a plugin-owned callable
+      tool but cannot unload or sandbox plugin code. Established by TASK-221.
+
+  - subsystem: "Memory"
+    roots: ["memory", "plugins.slots.memory"]
+    agent_markers: ["memorysearch", "memory", "workspace"]
+    agent_scoped_claim: "partial"
+    map_note: >-
+      YES partially, via agent workspace/index and per-agent memorySearch. NO
+      single `memory_scope` runtime key exists -- the SOP field is a governance
+      declaration, not an ACL. This row is the origin of the whole task.
+
+  - subsystem: "Cron / scheduled jobs"
+    roots: ["cron"]
+    agent_markers: ["cron", "schedule"]
+    agent_scoped_claim: "no"
+    map_note: >-
+      NO for scheduler existence -- the claim adjudicated here. Per-agent
+      narrowing of the cron TOOL is real but lives in tool policy, and jobs are
+      Gateway RUNTIME STATE rather than config, so no schema path covers them.
+
+  - subsystem: "Heartbeat"
+    roots: ["agents.defaults.heartbeat", "agents.list.heartbeat"]
+    agent_markers: ["heartbeat"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES. Corrects an error made and fixed within the 2026-08-16 session, which
+      briefly recorded heartbeat as Gateway-global.
+
+  - subsystem: "Hooks / lifecycle / webhooks"
+    roots: ["hooks"]
+    agent_markers: ["hook"]
+    # MECHANISM B. The narrowing is a Gateway-root key that names an agent, not
+    # a key under `agents.`. The first run matched only agent-scoped paths and
+    # reported this true row as OVERSTATED.
+    agent_ref_markers:
+      - hooks.allowedAgentIds
+      - hooks.mappings.agentId
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES for routing via hooks.allowedAgentIds and hooks.mappings[].agentId; NO
+      separate per-agent hook service. Two distinct surfaces: internal lifecycle
+      hooks (session-triggered, session-memory enabled here) and HTTP ingress.
+
+  - subsystem: "Channels"
+    roots: ["channels", "bindings"]
+    agent_markers: ["channel", "binding", "slack"]
+    # MECHANISM B. `bindings[].agentId` is the routing key, and it lives at the
+    # config root. Same false OVERSTATED as Hooks on the first run.
+    agent_ref_markers:
+      - bindings.agentId
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES for inbound routing and sender/channel scope; NO for connector loading.
+      `bindings` is read at Gateway STARTUP -- a config patch alone does not
+      route, which cost this workstream a day.
+
+  - subsystem: "MCP servers"
+    roots: ["mcp"]
+    agent_markers: ["mcp"]
+    # MECHANISM D. The map says agent-visible MCP functions narrow through the
+    # normal agent/sandbox tool policy using exact tool names or server globs.
+    # So there is no mcp-named key under `agents.` and there SHOULD NOT be --
+    # adjudicating this row against mcp-named paths alone reported a correct map
+    # row as OVERSTATED on the first run.
+    narrows_via: "Tool policy"
+    agent_scoped_claim: "partial"
+    map_note: >-
+      PARTIAL. Server registration is Gateway-wide; toolFilter is server-global,
+      not a per-agent ACL; agent-visible MCP functions narrow through normal
+      agent/sandbox tool policy. `codex.agents` is a Codex-specific projection
+      and must not be generalised.
+
+  - subsystem: "Model providers / routing"
+    roots: ["models"]
+    agent_markers: ["model", "provider"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES for route/model selection; NO for provider registration. TASK-242
+      criterion 2 established that pinning model.primary pins ONE call path.
+
+  - subsystem: "Sandbox / filesystem / sandbox network"
+    roots: ["agents.defaults.sandbox", "agents.list.sandbox"]
+    agent_markers: ["sandbox"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES for agent tool execution. It does NOT sandbox the Gateway or native
+      plugins, which run in the Gateway process.
+
+  - subsystem: "Tool policy"
+    roots: ["tools"]
+    agent_markers: ["tools"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES. Deny wins. This is the right layer for what a model may CALL and never
+      evidence that the underlying Gateway subsystem is disabled.
+
+  - subsystem: "Gateway network / HTTP / plugin handlers"
+    roots: ["gateway"]
+    # `bind` and `listen` were removed after the first real run: `bind` matched
+    # agents.list.sandbox.docker.binds -- filesystem bind MOUNTS -- and reported
+    # UNDERSTATED against a row whose own note says sandbox is a different row.
+    # A marker is a substring, and substrings collide. The exclusion stays as
+    # well as the narrower marker, so re-adding a broad marker cannot silently
+    # resurrect the same false positive.
+    agent_markers: ["gateway"]
+    exclude_markers: ["sandbox"]
+    agent_scoped_claim: "no"
+    map_note: >-
+      NO for Gateway and plugin handlers; the only per-agent network control is
+      sandbox.docker.network, which is the Sandbox row, not this one.
+
+  - subsystem: "Skills"
+    roots: ["skills"]
+    agent_markers: ["skill"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      YES for visibility/discovery only. A skill never grants or enforces
+      business authority -- the layering rule the whole agent design rests on.
+
+  - subsystem: "Sub-agent orchestration"
+    roots: ["agents.defaults.subagents", "agents.list.subagents", "tools.subagents"]
+    agent_markers: ["subagent", "allowagents", "agenttoagent"]
+    agent_scoped_claim: "yes"
+    map_note: >-
+      Added to criterion 1 by the 2026-08-17 scope addition. The narrowing layer
+      itself (tools.subagents.tools.*, subagents.allowAgents, tools.agentToAgent)
+      was found NOT DECLARED on this build. That is UNKNOWN, not FAIL: a layer
+      may be enforced internally without being configurable.
+
+# Effective values read alongside the schema. The schema says what MAY be set;
+# `config get` says what IS set. Both are needed and neither substitutes for a
+# behavioural observation of the running Gateway.
+dc_schema_surface_effective_paths:
+  - plugins.deny
+  - plugins.allow
+  - memory
+  - cron
+  - cron.enabled
+  - hooks
+  - hooks.enabled
+  - hooks.allowedAgentIds
+  - channels.slack.dmPolicy
+  - channels.slack.groupPolicy
+  - bindings
+  - mcp
+  - mcp.servers
+  - models
+  - gateway.bind
+  - tools.deny
+  - tools.exec.mode
+  - agents.defaults.sandbox
+  - agents.defaults.model
+  - agents.defaults.heartbeat
+  - agents.defaults.subagents
+  - tools.subagents
+  - skills
+
+dc_schema_surface_rows_path: "/root/.dc-schema-surface-rows.json"
+dc_schema_surface_effective_path: "/root/.dc-schema-surface-effective.json"
+dc_schema_surface_reader_path: "/root/.dc-schema-surface.py"
+dc_schema_surface_report: >-
+  /tmp/openclaw-schema-surface-{{
+     ansible_facts['date_time'].iso8601_basic_short | default('run') }}.txt
+
+# The full schema, kept as a diffable artifact beside the adjudication. Criterion
+# 1 asks for the returned path/type/description evidence, and the report holds a
+# capped view of it -- the cap is stated wherever it bites, but a reader checking
+# a specific path needs the uncapped source.
+dc_schema_surface_raw_report: >-
+  /tmp/openclaw-schema-raw-{{
+     ansible_facts['date_time'].iso8601_basic_short | default('run') }}.json

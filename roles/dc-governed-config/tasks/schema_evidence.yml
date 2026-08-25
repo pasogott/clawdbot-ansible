@@ -1,0 +1,247 @@
+---
+# TASK-225 criterion 1 — re-read every control-surface map row against the LIVE
+# schema of the pinned build.
+#
+#   sudo ansible-playbook playbooks/governed-audit.yml \
+#     --tags schema-evidence -e ansible_become=false
+#
+# ZERO MUTATION. Reads `config schema` and `config get`. Writes nothing to the
+# config, restarts nothing, invokes no agent, creates no session.
+#
+# WHY THE TASK IS STILL OPEN AND THIS IS WHAT CLOSES IT
+#
+# The map's rows were established mostly against pinned upstream v2026.7.1 and
+# each carries "HOST REVALIDATION REQUIRED". Criterion 1 asks for schema evidence
+# from the live host for eleven path families plus the 2026-08-17 sub-agent
+# addition, and states the handling rule directly:
+#
+#   "If the live schema differs from any row above, preserve the conflict and
+#    revise the row; do not reconcile by assumption."
+#
+# So this play PRESERVES conflicts and does not fail on them. A play that aborted
+# on the first conflict would never reach row thirteen, and the point is to
+# adjudicate all of them in one pass.
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+#
+# It does not mark TASK-225 complete, and it cannot: the task's reviewer is a
+# different party, and the house contract forbids self-verifying a consequential
+# claim. It produces the evidence that moves the task to Review.
+#
+# It also produces no behavioural observation. A declared key is not a proven
+# enforcement and an undeclared key is not a proven absence -- the asymmetry that
+# `plugins.allow` and the sub-agent narrowing layer both turn on.
+
+- name: Establish the CLI and confirm its verbs
+  ansible.builtin.include_tasks: agent_common.yml
+
+# 180s: the schema is ~1.9MB on this build and is serialised on demand. The
+# subagent-conformance play uses the same bound for the same call.
+- name: Capture the live schema
+  ansible.builtin.command:
+    argv: "{{ dc_audit_cli + ['config', 'schema'] }}"
+  register: dc_ss_schema
+  changed_when: false
+  failed_when: false
+  timeout: 180
+
+# THE FLOOR. Every finding below is derived from the schema, so a failed read
+# makes the result INSUFFICIENT EVIDENCE rather than a set of clean "not
+# declared" lines. Reporting absence from a source that never answered is the
+# defect this repository has a contract test for.
+- name: Refuse to adjudicate the map against a schema that did not read
+  ansible.builtin.fail:
+    msg: >-
+      `config schema` returned rc={{ dc_ss_schema.rc | default('?') }} and
+      {{ dc_ss_schema.stdout | default('') | length }} bytes.
+      INSUFFICIENT EVIDENCE — not a finding that the map is wrong, and not a
+      finding that it is right. Nothing has been written. Re-run once the CLI
+      answers; `--tags cli-surface` will say whether the verb still exists.
+  when:
+    - (dc_ss_schema.rc | default(1)) != 0
+      or (dc_ss_schema.stdout | default('') | length) < 10000
+    - dc_fail_closed | bool
+
+- name: Record the build the schema came from
+  ansible.builtin.command:
+    argv: "{{ dc_audit_cli + ['--version'] }}"
+  register: dc_ss_version
+  changed_when: false
+  failed_when: false
+  timeout: 30
+
+# The schema says what MAY be set. `config get` says what IS set. Read together
+# because a row is only half-answered by either.
+- name: Read the effective value of each governed path
+  ansible.builtin.command:
+    argv: "{{ dc_audit_cli + ['config', 'get', item] }}"
+  register: dc_ss_effective
+  changed_when: false
+  failed_when: false
+  timeout: 30
+  loop: "{{ dc_schema_surface_effective_paths }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Stage the schema for parsing
+  ansible.builtin.copy:
+    content: "{{ dc_ss_schema.stdout }}"
+    dest: "{{ dc_schema_staging_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+# Passed as a file rather than an argument. The rows carry multi-line notes and
+# would otherwise be ferried through argv, where quoting is one escape away from
+# silently truncating a governance claim.
+- name: Stage the map rows to be adjudicated
+  ansible.builtin.copy:
+    content: "{{ dc_schema_surface_rows | to_json }}"
+    dest: "{{ dc_schema_surface_rows_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+# rc != 0 for `config get` means the path is UNSET OR NOT PRESENT — the audit
+# report already carries that distinction in prose, and it is preserved here by
+# storing the empty string rather than dropping the key. A dropped key would read
+# downstream as "never asked".
+- name: Assemble the effective values for the reader
+  ansible.builtin.copy:
+    content: >-
+      {{ dict(dc_ss_effective.results | map(attribute='item') | list
+              | zip(dc_ss_effective.results | map(attribute='stdout')
+                    | map('default', '', true) | list)) | to_json }}
+    dest: "{{ dc_schema_surface_effective_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Stage the surface reader
+  ansible.builtin.copy:
+    src: schema_surface.py
+    dest: "{{ dc_schema_surface_reader_path }}"
+    owner: root
+    group: root
+    mode: '0555'
+  changed_when: false
+
+# failed_when: false is deliberate and load-bearing. rc=1 means CONFLICTS WERE
+# FOUND, which is a successful run of this play: criterion 1 requires conflicts
+# to be preserved and reported. Only rc=2 (unreadable input) is a failure, and it
+# is asserted separately below so the two cannot be confused.
+- name: Adjudicate every map row against the live schema
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ dc_schema_surface_reader_path }}"
+      - --schema
+      - "{{ dc_schema_staging_path }}"
+      - --rows
+      - "{{ dc_schema_surface_rows_path }}"
+      - --effective
+      - "{{ dc_schema_surface_effective_path }}"
+      - --build
+      - "{{ dc_ss_version.stdout | default('unknown') | trim }}"
+  register: dc_ss_result
+  changed_when: false
+  failed_when: false
+  timeout: 180
+
+# Written before the staged files are removed so the raw schema survives as a
+# diffable artifact. Criterion 1 asks for the returned path/type/description
+# evidence; the adjudication caps its per-row listing, and a reader checking one
+# specific path needs the uncapped source to check it against.
+- name: Preserve the raw schema as a diffable artifact
+  ansible.builtin.copy:
+    content: "{{ dc_ss_schema.stdout }}"
+    dest: "{{ dc_schema_surface_raw_report }}"
+    owner: "{{ dc_audit_report_owner }}"
+    group: "{{ dc_audit_report_owner }}"
+    mode: '0600'
+  changed_when: false
+
+- name: Remove the staged files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ dc_schema_staging_path }}"
+    - "{{ dc_schema_surface_rows_path }}"
+    - "{{ dc_schema_surface_effective_path }}"
+    - "{{ dc_schema_surface_reader_path }}"
+  changed_when: false
+
+- name: Refuse to report an adjudication the reader could not perform
+  ansible.builtin.fail:
+    msg: >-
+      The surface reader returned rc={{ dc_ss_result.rc | default('?') }}:
+      {{ dc_ss_result.stderr | default('') | trim }}
+      rc=2 means the schema or the rows were unreadable, so no row was
+      adjudicated. INSUFFICIENT EVIDENCE. The raw schema was still written to
+      {{ dc_schema_surface_raw_report }} and is not lost.
+  when:
+    - (dc_ss_result.rc | default(2)) not in [0, 1]
+    - dc_fail_closed | bool
+
+- name: Write the adjudication report
+  ansible.builtin.copy:
+    dest: "{{ dc_schema_surface_report }}"
+    owner: "{{ dc_audit_report_owner }}"
+    group: "{{ dc_audit_report_owner }}"
+    mode: '0600'
+    content: |
+      TASK-225 CRITERION 1 — CONTROL-SURFACE MAP vs LIVE SCHEMA
+      host={{ inventory_hostname }} generated={{ ansible_facts['date_time'].iso8601 }}
+      build={{ dc_ss_version.stdout | default('unknown') | trim }}
+      ZERO MUTATION: no config write, no restart, no agent invocation, no session
+
+      Raw schema artifact: {{ dc_schema_surface_raw_report }}
+
+      {{ dc_ss_result.stdout | default('<reader produced no output>') }}
+      {{ dc_ss_result.stderr | default('') }}
+  changed_when: false
+
+# rc=1 covers BOTH "conflicts found" and "unmapped roots found", so the receipt
+# cannot tell them apart from the return code alone. Run 2 exposed that: rc=1
+# with zero conflicts printed "CONFLICTS AND/OR UNMAPPED ROOTS FOUND" over a
+# summary reading `conflicts: 0`. An evidence artifact that reads worse than the
+# evidence it carries is the defect this workstream exists to catch, so the
+# counts are lifted from the report rather than inferred from the exit code.
+- name: Lift the conflict and unmapped counts out of the adjudication
+  ansible.builtin.set_fact:
+    dc_ss_conflicts: >-
+      {{ (dc_ss_result.stdout | default('')
+          | regex_findall('conflicts\s+:\s*(\d+)') + ['?']) | first }}
+    dc_ss_unmapped: >-
+      {{ (dc_ss_result.stdout | default('')
+          | regex_findall('unmapped roots\s+:\s*(\d+)') + ['?']) | first }}
+
+- name: Show the adjudication
+  ansible.builtin.debug:
+    msg: "{{ dc_ss_result.stdout_lines | default(['<no output>']) }}"
+
+- name: Emit the schema-evidence receipt
+  ansible.builtin.debug:
+    msg: >-
+      DC-SCHEMA-EVIDENCE RECEIPT (TASK-225 criterion 1) |
+      build={{ dc_ss_version.stdout | default('unknown') | trim }} |
+      schema_bytes={{ dc_ss_schema.stdout | default('') | length }} |
+      rows={{ dc_schema_surface_rows | length }} |
+      reader_rc={{ dc_ss_result.rc | default('?') }} |
+      conflicts={{ dc_ss_conflicts }}
+      ({{ 'every row agrees with the live schema'
+          if dc_ss_conflicts == '0'
+          else 'PRESERVED, not reconciled — revise the row against the evidence' }}) |
+      unmapped_roots={{ dc_ss_unmapped }}
+      (top-level roots covered by no map row; a FLOOR, not a ceiling) |
+      report={{ dc_schema_surface_report }} |
+      raw_schema={{ dc_schema_surface_raw_report }} |
+      THIS IS EVIDENCE, NOT ACCEPTANCE. It moves TASK-225 to Review. The task's
+      reviewer is a different party and the house contract forbids
+      self-verifying a consequential claim, so nothing here marks it complete. |
+      Every finding is about what this build DECLARES and what this host has
+      CONFIGURED. None is a behavioural observation of the running Gateway.

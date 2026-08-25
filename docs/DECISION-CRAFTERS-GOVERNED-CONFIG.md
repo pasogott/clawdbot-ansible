@@ -119,6 +119,7 @@ python3 tests/dc_slack_binding.py             #  27 checks
 python3 tests/dc_scheduler_grant.py           #  20 checks
 python3 tests/dc_evidence_contract.py         #  11 checks
 python3 tests/dc_model_override_contract.py   #  36 checks
+python3 tests/dc_schema_surface.py             #  48 checks
 ```
 
 **Merge contract.** *Contract* checks prove the merge overrides permissive
@@ -128,6 +129,30 @@ values are themselves safe — without them the suite would pass with
 against the role's own defaults. It also refuses deployment identifiers in
 tracked files, because this repository is public and the role is used with a
 private inventory.
+
+**Schema surface.** Adjudicates every recorded control-surface map row against
+the live schema (`--tags schema-evidence`, TASK-225 criterion 1). The tests that
+matter are the ones that break something: if `$ref` resolution or the array-path
+spelling regressed, most of the schema would go invisible and *every* per-agent
+row would report a confident, false conflict. Both are asserted by comparing a
+`$ref` fixture against its inlined twin. A schema too small or too broken to be
+evidence returns `INSUFFICIENT EVIDENCE`, never a page of clean-looking
+"not declared" lines.
+
+A missing key is reported `UNKNOWN`, never `FAIL`. A control can be undeclared
+and still enforced internally, and a false `FAIL` on an isolation control sends
+someone to widen a policy that was never broken.
+
+The map expresses per-agent narrowing three different ways, and the first
+version of the adjudicator recognised one of them. On its first real run it
+produced four conflicts out of thirteen rows and every one was its own fault:
+`hooks.allowedAgentIds` and `bindings[].agentId` narrow by naming an agent from
+the config root, MCP narrows through the tool-policy row, and the marker `bind`
+matched `sandbox.docker.binds` — a filesystem bind mount, not a network bind.
+So a row may now declare `agent_ref_markers` (exact root keys that route by
+agent id), `narrows_via` (delegation to another row, honoured only when that row
+is itself CONFIRMED), and `exclude_markers`. All four false positives are
+reproduced as regression fixtures.
 
 **Slack binding.** Renders the real Jinja expression from the task file rather
 than a copy of it. Asserts the peer-kind mapping, that ids are not case-folded,
