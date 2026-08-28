@@ -47,20 +47,33 @@
 # `tailscale status --json` exits 0 whenever tailscaled is reachable, even in
 # NeedsLogin/Stopped states, so the exit code alone can't tell us if the node
 # is joined. Parse BackendState instead.
+- name: Determine Tailscale backend state (Linux)
+  ansible.builtin.set_fact:
+    tailscale_backend_state: >-
+      {{ (tailscale_status_linux.stdout | from_json).BackendState
+         if (tailscale_status_linux.rc == 0 and tailscale_status_linux.stdout | length > 0)
+         else 'Unknown' }}
+
 - name: Determine whether Tailscale is connected (Linux)
   ansible.builtin.set_fact:
-    tailscale_connected: >-
-      {{ tailscale_status_linux.rc == 0
-         and tailscale_status_linux.stdout | length > 0
-         and (tailscale_status_linux.stdout | from_json).BackendState == 'Running' }}
+    tailscale_connected: "{{ tailscale_backend_state == 'Running' }}"
 
 - name: Join Tailnet with auth key (Linux)
   ansible.builtin.command:
     cmd: "tailscale up{% if tailscale_ssh | bool %} --ssh{% endif %} --authkey {{ tailscale_authkey }}"
   when:
-    - not tailscale_connected
+    - tailscale_backend_state == 'NeedsLogin'
     - tailscale_authkey | length > 0
   no_log: true
+  changed_when: true
+
+# A `Stopped` node is already authorized; reconnect it without an auth key so
+# a routine re-run can't fail because a one-time/expired key was reused.
+- name: Reconnect previously authorized Tailscale node (Linux)
+  ansible.builtin.command:
+    cmd: "tailscale up{% if tailscale_ssh | bool %} --ssh{% endif %}"
+  when:
+    - tailscale_backend_state == 'Stopped'
   changed_when: true
 
 - name: Display Tailscale auth URL if not connected and no auth key provided (Linux)
@@ -78,5 +91,5 @@
       - ""
       - "Get auth key from: https://login.tailscale.com/admin/settings/keys"
   when:
-    - not tailscale_connected
+    - tailscale_backend_state == 'NeedsLogin'
     - tailscale_authkey | length == 0
