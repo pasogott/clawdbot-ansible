@@ -60,7 +60,7 @@
 
 - name: Join Tailnet with auth key (Linux)
   ansible.builtin.command:
-    cmd: "tailscale up{% if tailscale_ssh | bool %} --ssh{% endif %} --authkey {{ tailscale_authkey }}"
+    cmd: "tailscale up --reset{% if tailscale_ssh | bool %} --ssh{% endif %} --authkey {{ tailscale_authkey }}"
   when:
     - tailscale_backend_state == 'NeedsLogin'
     - tailscale_authkey | length > 0
@@ -69,9 +69,12 @@
 
 # A `Stopped` node is already authorized; reconnect it without an auth key so
 # a routine re-run can't fail because a one-time/expired key was reused.
+# `--reset` clears any non-default prefs left over from a previous run (e.g.
+# a prior tailscale_ssh value), since `tailscale up` otherwise refuses to
+# apply flags that don't restate every currently-active non-default pref.
 - name: Reconnect previously authorized Tailscale node (Linux)
   ansible.builtin.command:
-    cmd: "tailscale up{% if tailscale_ssh | bool %} --ssh{% endif %}"
+    cmd: "tailscale up --reset{% if tailscale_ssh | bool %} --ssh{% endif %}"
   when:
     - tailscale_backend_state == 'Stopped'
   changed_when: true
