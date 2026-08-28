@@ -7,126 +7,64 @@ description: Technical implementation details
 
 ## Component Overview
 
+The Gateway runs natively on the host as the dedicated `openclaw` user. Docker is installed for sandbox use, not to host the Gateway.
+
+```text
+Host
+├── UFW + fail2ban (host firewall and SSH protection)
+├── Docker + DOCKER-USER (container network isolation)
+└── openclaw user
+    ├── Node.js + OpenClaw (npm release or source checkout)
+    ├── ~/.openclaw/openclaw.json (created by onboarding)
+    └── systemd user service (installed by onboarding)
 ```
-┌─────────────────────────────────────────┐
-│ UFW Firewall (SSH only)                 │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────┴──────────────────────────┐
-│ DOCKER-USER Chain (iptables)            │
-│ Blocks all external container access    │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────┴──────────────────────────┐
-│ Docker Daemon                            │
-│ - Non-root containers                    │
-│ - Localhost-only binding                 │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────┴──────────────────────────┐
-│ OpenClaw Container                       │
-│ User: openclaw                           │
-│ Port: 127.0.0.1:3000                     │
-└──────────────────────────────────────────┘
-```
+
+The role creates the account, installs dependencies and OpenClaw, and prepares its directory structure. It does not generate application configuration, install a Gateway service, or start the Gateway. The operator completes setup with `openclaw onboard --install-daemon` as the OpenClaw user.
 
 ## File Structure
 
-```
-/opt/openclaw/
-├── Dockerfile
-├── docker-compose.yml
+Default paths after installation and onboarding:
 
-/home/openclaw/.openclaw/
-├── config.yml
-├── sessions/
-└── credentials/
+```text
+/home/openclaw/
+├── .local/bin/openclaw
+├── .local/share/pnpm/
+├── .openclaw/
+│   ├── openclaw.json                 # Onboarding-owned JSON5 configuration
+│   ├── sessions/
+│   └── credentials/
+└── .config/systemd/user/
+    └── openclaw-gateway.service      # Onboarding-owned user unit
 
-/etc/systemd/system/
-└── openclaw.service
-
-/etc/docker/
-└── daemon.json
-
-/etc/ufw/
-└── after.rules (DOCKER-USER chain)
+/etc/docker/daemon.json               # Role-managed Docker configuration
+/etc/ufw/after.rules                  # Role-managed DOCKER-USER rules
 ```
 
-## Service Management
+The role does not create `/opt/openclaw/docker-compose.yml` or `/etc/systemd/system/openclaw.service`. Development mode additionally creates a source checkout under `~/code/openclaw` by default.
 
-OpenClaw runs as a systemd service that manages the Docker container:
+## Service and Configuration Ownership
 
-```bash
-# Systemd controls Docker Compose
-systemd → docker compose → openclaw container
-```
+Onboarding owns the native Gateway's configuration and service lifecycle. Use `openclaw gateway status`, `openclaw gateway restart`, and `openclaw logs` as the OpenClaw user; see the [upstream Gateway runbook](https://docs.openclaw.ai/gateway).
 
-## Installation Flow
-
-1. **Tailscale Setup** (`tailscale.yml`)
-   - Add Tailscale repository
-   - Install Tailscale package
-   - Display connection instructions
-
-2. **User Creation** (`user.yml`)
-   - Create `openclaw` system user
-
-3. **Docker Installation** (`docker.yml`)
-   - Install Docker CE + Compose V2
-   - Keep the OpenClaw service user out of the root-equivalent Docker group
-   - Create `/etc/docker` directory
-
-4. **Firewall Setup** (`firewall.yml`)
-   - Install UFW
-   - Configure DOCKER-USER chain
-   - Configure Docker daemon (`/etc/docker/daemon.json`)
-   - Allow SSH (22/tcp) and Tailscale (41641/udp)
-
-5. **Node.js Installation** (`nodejs.yml`)
-   - Add NodeSource repository
-   - Install Node.js 22.x
-   - Install pnpm globally
-
-6. **OpenClaw Setup** (`openclaw.yml`)
-   - Create directories
-   - Generate configs from templates
-   - Build Docker image
-   - Start container via Compose
-   - Install systemd service
-
-## Key Design Decisions
-
-### Why UFW + DOCKER-USER?
-
-Docker manipulates iptables directly, bypassing UFW. The DOCKER-USER chain is evaluated before Docker's FORWARD chain, allowing us to block traffic before Docker sees it.
-
-### Why Localhost Binding?
-
-Defense in depth. Even if DOCKER-USER fails, localhost binding prevents external access.
-
-### Why Systemd Service?
-
-- Auto-start on boot
-- Clean lifecycle management
-- Integration with system logs
-- Dependency management (after Docker)
-
-### Why Non-Root Container?
-
-Principle of least privilege. If container is compromised, attacker has limited privileges.
+The installer does not apply systemd sandboxing directives or application allowlists and rate limits. Inspect the installed service and application configuration rather than inferring runtime controls from the presence of Docker. See [security verification](security.md#verification).
 
 ## Ansible Task Order
 
-```
-main.yml
-├── tailscale.yml (VPN setup)
-├── user.yml (create openclaw user)
-├── docker.yml (install Docker, create /etc/docker)
-├── firewall.yml (configure UFW + Docker daemon)
-├── nodejs.yml (Node.js + pnpm)
-└── openclaw.yml (container setup)
+```text
+roles/openclaw/tasks/main.yml
+├── system-tools.yml (base packages and host tools)
+├── tailscale-linux.yml (optional VPN installation)
+├── user.yml (account and user-service prerequisites)
+├── docker-linux.yml (Docker; includes docker-security.yml)
+├── firewall-linux.yml (UFW and Docker daemon configuration)
+├── nodejs.yml (Node.js and pnpm)
+└── openclaw.yml (directories and release/development installation)
 ```
 
-Order matters: Docker must be installed before firewall configuration because:
-1. `/etc/docker` directory must exist for `daemon.json`
-2. Docker service must exist to be restarted after config changes
+Docker must be installed before firewall configuration: `/etc/docker` must exist for `daemon.json`, and the Docker service must exist before configuration changes can restart it.
+
+## Security Boundaries
+
+UFW protects host services. Docker-published traffic can bypass UFW, so the separate DOCKER-USER chain filters incoming container traffic. Neither mechanism configures the native Gateway's bind address.
+
+The default native Gateway uses loopback; onboarding owns that setting. Verify it after setup, and use an SSH tunnel or explicitly configured Tailscale Serve for remote access. The role excludes the service account from the root-equivalent Docker group; operators administer Docker explicitly through `sudo`.

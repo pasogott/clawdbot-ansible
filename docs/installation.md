@@ -50,63 +50,37 @@ sudo tailscale status
 
 Get auth keys from: https://login.tailscale.com/admin/settings/keys
 
-### 2. Configure OpenClaw
+### 2. Configure OpenClaw and Install the Gateway Service
+
+Switch to the dedicated account and run onboarding:
 
 ```bash
-# Edit config
-sudo nano /home/openclaw/.openclaw/config.yml
-
-# Key settings to configure:
-# - provider: whatsapp/telegram/signal
-# - phone: your number
-# - ai.provider: anthropic/openai
-# - ai.model: claude-3-5-sonnet-20241022
+sudo su - openclaw
+openclaw onboard --install-daemon
 ```
 
-### 3. Login to Provider
-
-```bash
-# Login (will prompt for QR code or phone verification)
-sudo docker exec -it openclaw openclaw login
-
-# Check connection
-sudo docker logs -f openclaw
-```
+Onboarding creates `~/.openclaw/openclaw.json` (JSON5), guides provider setup, and installs the native Gateway as a systemd user service. The Ansible role prepares directories and dependencies but does not create the application configuration or service. There is no installer-managed `config.yml` or OpenClaw container.
 
 ## Service Management
 
-### Systemd Commands
+Run these as the OpenClaw user:
 
 ```bash
-# Start/stop/restart
-sudo systemctl start openclaw
-sudo systemctl stop openclaw
-sudo systemctl restart openclaw
-
-# View status
-sudo systemctl status openclaw
-
-# Enable/disable auto-start
-sudo systemctl enable openclaw
-sudo systemctl disable openclaw
+openclaw gateway status
+openclaw gateway stop
+openclaw gateway start
+openclaw gateway restart
+openclaw logs
 ```
 
-### Docker Commands
+For systemd inspection, the default user unit is `openclaw-gateway.service`:
 
 ```bash
-# View logs
-sudo docker logs openclaw
-sudo docker logs -f openclaw  # follow
-
-# Shell access
-sudo docker exec -it openclaw bash
-
-# Restart container
-sudo docker restart openclaw
-
-# Check status
-sudo docker compose -f /opt/openclaw/docker-compose.yml ps
+systemctl --user status openclaw-gateway.service
+journalctl --user -u openclaw-gateway.service -n 50
 ```
+
+The installer does not add systemd sandboxing directives to this unit. See [service security](security.md#native-gateway-service) and the [upstream Gateway runbook](https://docs.openclaw.ai/gateway) for configuration and service details.
 
 ### Firewall Management
 
@@ -124,23 +98,16 @@ sudo iptables -L DOCKER-USER -n -v
 
 ## Accessing OpenClaw
 
-OpenClaw's web interface runs on port 3000 (localhost only).
-
-### Via Tailscale (Recommended)
-
-```bash
-# After connecting Tailscale, browse to:
-http://TAILSCALE_IP:3000
-```
-
-Wait, port 3000 is bound to localhost, so this won't work directly. Need to update the compose file or use SSH tunnel.
+The native Gateway defaults to loopback port `18789`. Use the actual port reported by `openclaw gateway status` if you changed it during configuration.
 
 ### Via SSH Tunnel
 
 ```bash
-ssh -L 3000:localhost:3000 user@server
-# Then browse to: http://localhost:3000
+ssh -N -L 18789:127.0.0.1:18789 user@server
+# Then browse to: http://localhost:18789
 ```
+
+The server can be reached through its Tailscale address. Connecting Tailscale alone does not make a loopback listener reachable at the server's Tailscale IP. For direct browser access, configure [Tailscale Serve](https://docs.openclaw.ai/gateway/tailscale) separately.
 
 ## Verification
 
@@ -158,66 +125,20 @@ At minimum, confirm:
 
 ## Uninstall
 
+First back up any configuration and data you need. As the OpenClaw user, remove the onboarding-managed service:
+
 ```bash
-# Stop services
-sudo systemctl stop openclaw
-sudo systemctl disable openclaw
-sudo tailscale down
-
-# Remove containers and data
-sudo docker compose -f /opt/openclaw/docker-compose.yml down
-sudo rm -rf /opt/openclaw
-sudo rm -rf /home/openclaw/.openclaw
-sudo rm /etc/systemd/system/openclaw.service
-sudo systemctl daemon-reload
-
-# Remove packages (optional)
-sudo apt remove --purge tailscale docker-ce docker-ce-cli containerd.io docker-compose-plugin nodejs
-
-# Remove user (optional)
-sudo userdel -r openclaw
-
-# Reset firewall (optional)
-sudo ufw disable
-sudo ufw --force reset
+openclaw gateway stop
+openclaw gateway uninstall
 ```
+
+Then, as an administrator, remove the account or packages only if they are no longer needed. Removing the account's home deletes its OpenClaw data; Docker, Node.js, Tailscale, and firewall rules may be shared with other services.
 
 ## Advanced Configuration
 
-### Custom Port
+Use `openclaw configure` as the OpenClaw user for application settings. Gateway ports, credentials, and channel policy belong to `~/.openclaw/openclaw.json`, not a Compose file. See the [upstream configuration guide](https://docs.openclaw.ai/gateway/configuration) for supported settings and restart requirements.
 
-Edit `/opt/openclaw/docker-compose.yml`:
-
-```yaml
-ports:
-  - "127.0.0.1:3001:3000"  # Change 3001 to desired port
-```
-
-Then restart:
-```bash
-sudo systemctl restart openclaw
-```
-
-### Environment Variables
-
-Add to `/opt/openclaw/docker-compose.yml`:
-
-```yaml
-environment:
-  - NODE_ENV=production
-  - ANTHROPIC_API_KEY=sk-ant-xxx
-  - DEBUG=openclaw:*
-```
-
-### Volume Mounts
-
-Add additional volumes in docker-compose.yml:
-
-```yaml
-volumes:
-  - /home/openclaw/.openclaw:/home/openclaw/.openclaw
-  - /path/to/custom:/custom
-```
+The legacy installer variable `openclaw_port` does not configure the native Gateway. Use onboarding or OpenClaw configuration to change the port.
 
 ## Automation
 

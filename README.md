@@ -62,7 +62,7 @@ cd openclaw-ansible
 - Docker CE + Compose V2 (for sandboxes)
 - Node.js 22.x + pnpm
 - OpenClaw on host (not containerized)
-- Systemd service (auto-start)
+- Systemd user-service prerequisites (onboarding installs the Gateway service)
 
 ## Post-Install
 
@@ -252,7 +252,7 @@ Enable with: `-e openclaw_install_mode=development`
 - **Non-root**: OpenClaw runs as unprivileged user
 - **No Docker socket access**: The OpenClaw user is excluded from the root-equivalent `docker` group
 - **Scoped sudo**: Limited to service management (not full root)
-- **Systemd hardening**: NoNewPrivileges, PrivateTmp, ProtectSystem
+- **Service ownership**: Onboarding installs the native Gateway's systemd user service; this role does not apply systemd sandboxing directives
 
 Run the [post-install security verification](docs/security.md#verification) for commands and expected results. In the default configuration, an external TCP scan should show only SSH on port 22; Tailscale uses UDP and is not included in that TCP scan.
 

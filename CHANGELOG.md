@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Remove unused configuration, service, and banner templates; document the native Gateway and onboarding-owned security configuration accurately. Thanks @tosin2013 for the report.
 - Update the Ansible lint toolchain and GitHub Actions dependencies, with Python 3.14 for CI.
 - Exclude checkout metadata and local Ansible caches from Docker test images so the harness also works from Git worktrees.
 - Preserve service-user privilege switching in the Docker test harness to avoid recurring pnpm ownership changes.

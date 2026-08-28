@@ -117,7 +117,7 @@
     mode: '0644'
     insertafter: EOF
 
-# NOTE: We do NOT create config.yml here - openclaw onboard/configure will do that
+# NOTE: We do NOT create openclaw.json here - openclaw onboard/configure will do that
 # We also do NOT install the systemd service - openclaw onboard --install-daemon will do that
 # The .openclaw directory structure is created above, but config and daemon are user-initiated
 

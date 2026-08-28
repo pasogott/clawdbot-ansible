@@ -56,30 +56,33 @@ COMMIT
 
 **Result**: Even `docker run -p 80:80 nginx` won't expose port 80 externally.
 
-### Layer 4: Localhost-Only Binding
+### Native Gateway and Container Binding
 
-All container ports bind to 127.0.0.1:
+OpenClaw runs natively as the dedicated `openclaw` user. Onboarding owns its configuration, including the Gateway listener. OpenClaw's [default bind is loopback](https://docs.openclaw.ai/gateway/security#network-exposure-bind-ports-firewall); this role does not set `gateway.bind`. Verify the listener after onboarding or changing configuration.
+
+For any containers you administer separately, explicitly bind published ports to localhost:
 
 ```yaml
 ports:
   - "127.0.0.1:3000:3000"
 ```
 
-### Layer 5: Non-Root Container
+The role installs Docker and its firewall isolation for sandbox use; it does not deploy an OpenClaw container or Compose file.
 
-Container processes run as unprivileged `openclaw` user.
+### Native Gateway Service
 
-### Layer 6: Systemd Hardening
+`openclaw onboard --install-daemon` installs the Gateway's systemd **user** service. The role prepares the account and user-service environment but does not install or harden that unit.
 
-The openclaw service runs with security restrictions:
+Do not assume `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem`, `ProtectHome`, or scoped `ReadWritePaths` are enabled by this installer. Inspect the installed unit as the OpenClaw user:
 
-- `NoNewPrivileges=true` - Prevents privilege escalation
-- `PrivateTmp=true` - Isolated /tmp directory
-- `ProtectSystem=strict` - Read-only system directories
-- `ProtectHome=read-only` - Limited home directory access
-- `ReadWritePaths` - Only ~/.openclaw is writable
+```bash
+systemctl --user show openclaw-gateway.service \
+  -p NoNewPrivileges -p PrivateTmp -p ProtectSystem -p ProtectHome -p ReadWritePaths
+```
 
-### Layer 7: Scoped Sudo Access
+Application authentication, channel allowlists, and rate limits belong to OpenClaw's JSON5 configuration at `~/.openclaw/openclaw.json`, managed through onboarding/configuration. This role does not supply an application security policy. Follow the [upstream security guide](https://docs.openclaw.ai/gateway/security) and run `openclaw security audit` after configuring it.
+
+### Scoped Sudo Access
 
 The openclaw user has limited sudo permissions (not full root):
 
@@ -96,7 +99,7 @@ grant root-equivalent control through the rootful Docker daemon and bypass the
 scoped sudo boundary. Reapplying the playbook also removes this legacy grant
 from existing installations without changing other supplementary groups.
 
-### Layer 8: Automatic Security Updates
+### Automatic Security Updates
 
 Unattended-upgrades is configured for automatic security patches:
 
@@ -196,22 +199,14 @@ Expected: the unit is loaded and active. Use `sudo unattended-upgrade --dry-run 
 
 ## Tailscale Access
 
-OpenClaw's web interface (port 3000) is bound to localhost. Access it via:
+For a default Gateway on loopback port `18789`, use an SSH tunnel:
 
-1. **SSH tunnel**:
-   ```bash
-   ssh -L 3000:localhost:3000 user@server
-   # Then browse to http://localhost:3000
-   ```
+```bash
+ssh -N -L 18789:127.0.0.1:18789 user@server
+# Then browse to http://localhost:18789
+```
 
-2. **Tailscale** (recommended):
-   ```bash
-   # On server: already done by playbook
-   sudo tailscale up
-   
-   # From your machine:
-   # Browse to http://TAILSCALE_IP:3000
-   ```
+The server address can be its Tailscale address. A loopback listener is not directly reachable at `TAILSCALE_IP:18789`; direct browser access through Tailscale requires separately configured [Tailscale Serve](https://docs.openclaw.ai/gateway/tailscale). Use your configured Gateway port if different.
 
 ## Network Flow
 
