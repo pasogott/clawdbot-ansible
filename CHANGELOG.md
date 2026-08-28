@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Update the Ansible lint toolchain and GitHub Actions dependencies, with Python 3.14 for CI.
+- Exclude checkout metadata and local Ansible caches from Docker test images so the harness also works from Git worktrees.
+- Preserve service-user privilege switching in the Docker test harness to avoid recurring pnpm ownership changes.
 - Remove the OpenClaw service user from the root-equivalent Docker group, including on existing installations. Thanks @Tonynanra for the report.
 - Document expected results for post-install security verification and link the checks from setup documentation. Thanks @justinfiore for the report.
 

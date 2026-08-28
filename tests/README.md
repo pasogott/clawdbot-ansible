@@ -33,9 +33,8 @@ The `ci_test` variable skips tasks that require:
 - Docker-in-Docker (Docker CE installation)
 - Kernel access (UFW/iptables firewall)
 - systemd services (loginctl, daemon installation)
-- External package installation (openclaw app install)
 
-Everything else runs normally: package installation, user creation, Node.js/pnpm setup, directory structure, config file rendering, etc.
+Everything else runs normally: package installation, user creation, Node.js/pnpm setup, OpenClaw installation from npm, directory structure, config file rendering, etc. The harness requires internet access.
 
 ## What Gets Tested
 
@@ -51,7 +50,7 @@ Everything else runs normally: package installation, user creation, Node.js/pnpm
 | UFW / iptables | ❌ No | Needs kernel access |
 | fail2ban / systemd | ❌ No | Needs running systemd |
 | Tailscale | ❌ No | Disabled by default already |
-| OpenClaw app install | ❌ No | External package |
+| OpenClaw app install | ✅ Yes | Latest npm release and version check |
 | Idempotency | ✅ Yes | Second run must have 0 changes |
 
 ## Exit Codes
@@ -60,6 +59,21 @@ Everything else runs normally: package installation, user creation, Node.js/pnpm
 - `1` - Test failure (convergence failed, verification failed, or idempotency check failed)
 
 ## Development
+
+### Lint and Syntax Checks
+
+The pinned lint tools in `requirements-lint.txt` require Python 3.12 or newer; CI uses Python 3.14. These development tools do not change the installer's minimum Ansible version.
+
+```bash
+python -m pip install -r requirements-lint.txt
+ansible-galaxy collection install -r requirements.yml
+yamllint .
+ansible-lint playbook.yml tests/docker-group-security.yml
+ansible-playbook playbook.yml --syntax-check
+ansible-playbook tests/docker-group-security.yml --syntax-check
+```
+
+### Additional Distributions
 
 To add tests for additional distributions:
 1. Create `Dockerfile.<distro>` (e.g., `Dockerfile.debian12`)

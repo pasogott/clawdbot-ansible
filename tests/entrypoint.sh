@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PLAYBOOK_ARGS=(-e ci_test=true -e ansible_become=false --connection=local)
+# Keep task-level become_user active so pnpm runs as the service user, not root.
+PLAYBOOK_ARGS=(-e ci_test=true --connection=local)
 
 # --- Step 1: Convergence ---
 echo "===> Step 1: Convergence test"

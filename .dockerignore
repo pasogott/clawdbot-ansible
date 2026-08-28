@@ -1,0 +1,4 @@
+.git
+.ansible
+venv
+*.tar.gz
