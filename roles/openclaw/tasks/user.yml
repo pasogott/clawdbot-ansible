@@ -74,7 +74,7 @@
       # daemon-reload affects all units (required after service file changes)
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 
-      # Tailscale - diagnostics + connect/disconnect
+      # Tailscale - diagnostics + connect/disconnect + serve
       # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
       # remove 'up' and 'down' lines - operator must then manage VPN manually.
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
@@ -84,6 +84,12 @@
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale set --operator={{ openclaw_user }}
+      # Serve management only; actual serve setup uses operator mode
+      # (the service unit sets NoNewPrivileges=true, blocking sudo there)
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale serve status
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale serve off
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale serve reset
 
       # Journal access - openclaw logs only
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *

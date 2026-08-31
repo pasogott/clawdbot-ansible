@@ -9,6 +9,32 @@
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml
 
+- name: Read current Tailscale operator preference
+  ansible.builtin.command: tailscale debug prefs
+  register: tailscale_prefs
+  changed_when: false
+  failed_when: false
+  # prefs JSON can include private Tailscale config (node/network-lock keys).
+  # Keep it out of Ansible callback/CI logs (see PR review).
+  no_log: true
+  when:
+    - tailscale_enabled | bool
+    - tailscale_backend_state | default('NoState') == 'Running'
+
+# Only grant operator when none is configured. Never replace a pre-existing
+# OperatorUser (another account may already own Serve authority).
+- name: Set Tailscale operator to openclaw user when unset
+  ansible.builtin.command: tailscale set --operator={{ openclaw_user }}
+  register: tailscale_set_operator
+  changed_when: true
+  when:
+    - tailscale_enabled | bool
+    - tailscale_backend_state | default('NoState') == 'Running'
+    - (tailscale_prefs.rc | default(1)) == 0
+    - >
+      ((tailscale_prefs.stdout | default('{}') | from_json).OperatorUser
+       | default('') | length) == 0
+
 - name: Include Docker installation tasks
   ansible.builtin.include_tasks: docker-linux.yml
   when: not ci_test

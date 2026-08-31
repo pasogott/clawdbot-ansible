@@ -8,6 +8,10 @@ ci_test: false
 # WARNING: Tasks using tailscale_authkey MUST set no_log: true to prevent credential exposure
 tailscale_enabled: false  # Set to true to install and configure Tailscale
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
+# Finite wait for `tailscale up --authkey` (tailscale default is 0s = hang forever)
+tailscale_authkey_timeout: "60s"
+# Ansible hard kill (seconds); keep slightly above tailscale_authkey_timeout
+tailscale_authkey_ansible_timeout: 90
 
 # Node.js version
 nodejs_version: "22.x"

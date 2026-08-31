@@ -44,6 +44,83 @@
   changed_when: false
   failed_when: false
 
+- name: Parse Tailscale backend state
+  ansible.builtin.set_fact:
+    tailscale_backend_state: >-
+      {{ (tailscale_status_linux.stdout | from_json).BackendState
+         | default('NoState') }}
+  when: tailscale_status_linux.rc == 0
+
+- name: Set backend state when tailscaled is unreachable
+  ansible.builtin.set_fact:
+    tailscale_backend_state: "NoState"
+  when: tailscale_status_linux.rc != 0
+
+# --timeout defaults to 0s (block forever) in Tailscale CLI; bound it so an
+# unreachable control plane or approval-pending key cannot hang one-command install.
+- name: Auto-connect Tailscale with auth key
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - up
+      - --authkey
+      - "{{ tailscale_authkey }}"
+      - "--timeout={{ tailscale_authkey_timeout }}"
+  register: tailscale_connect
+  changed_when: tailscale_connect.rc == 0
+  failed_when: false
+  no_log: true
+  # Hard cap so a hung CLI cannot stall Ansible if --timeout is ignored by old clients.
+  timeout: "{{ tailscale_authkey_ansible_timeout | int }}"
+  when:
+    - tailscale_backend_state != 'Running'
+    - tailscale_authkey | default('') | length > 0
+
+- name: Fail clearly when auth-key connect times out or fails
+  ansible.builtin.fail:
+    msg: >-
+      Tailscale auth-key connect failed or timed out after
+      {{ tailscale_authkey_timeout }} (BackendState was
+      {{ tailscale_backend_state }}). Check control-plane reachability,
+      auth-key validity, and whether the key requires interactive approval.
+      Re-run with a valid key or connect manually: sudo tailscale up
+  when:
+    - tailscale_connect is defined
+    - not (tailscale_connect.skipped | default(false))
+    - (tailscale_connect.rc | default(1)) != 0
+
+# Re-query after connect so later operator grant sees Running on first-run auth-key installs.
+- name: Refresh Tailscale backend state after auth-key auto-connect
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status_after_connect
+  changed_when: false
+  failed_when: false
+  when:
+    - tailscale_connect is defined
+    - not (tailscale_connect.skipped | default(false))
+    - (tailscale_connect.rc | default(1)) == 0
+
+- name: Update backend state fact after successful auth-key connect
+  ansible.builtin.set_fact:
+    tailscale_backend_state: >-
+      {{ (tailscale_status_after_connect.stdout | from_json).BackendState
+         | default('Running') }}
+  when:
+    - tailscale_status_after_connect is defined
+    - not (tailscale_status_after_connect.skipped | default(false))
+    - (tailscale_status_after_connect.rc | default(1)) == 0
+
+- name: Mark backend Running when connect succeeded but status refresh failed
+  ansible.builtin.set_fact:
+    tailscale_backend_state: "Running"
+  when:
+    - tailscale_connect is defined
+    - not (tailscale_connect.skipped | default(false))
+    - (tailscale_connect.rc | default(1)) == 0
+    - tailscale_status_after_connect is defined
+    - not (tailscale_status_after_connect.skipped | default(false))
+    - (tailscale_status_after_connect.rc | default(1)) != 0
+
 - name: Display Tailscale auth URL if not connected (Linux)
   ansible.builtin.debug:
     msg:
@@ -58,4 +135,9 @@
       - "sudo tailscale up --authkey tskey-auth-xxxxx"
       - ""
       - "Get auth key from: https://login.tailscale.com/admin/settings/keys"
-  when: tailscale_status_linux.rc != 0
+      - ""
+      - "To allow the openclaw user to run tailscale serve:"
+      - "Run: sudo tailscale set --operator={{ openclaw_user }}"
+  when:
+    - tailscale_backend_state != 'Running'
+    - tailscale_authkey | default('') | length == 0
