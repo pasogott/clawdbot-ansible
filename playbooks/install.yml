@@ -88,16 +88,6 @@
     - openclaw
 
   post_tasks:
-    - name: Copy ASCII art script
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../roles/openclaw/templates/show-lobster.sh.j2"
-        dest: /tmp/show-lobster.sh
-        mode: '0755'
-
-    - name: Display ASCII art
-      ansible.builtin.command: /tmp/show-lobster.sh
-      changed_when: false
-
     - name: Create one-time welcome message for openclaw user
       ansible.builtin.copy:
         dest: "{{ openclaw_home }}/.openclaw-welcome"

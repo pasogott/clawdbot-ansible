@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix local installation failing after package setup by removing tasks that reference the deleted banner template; run the Docker installer harness in CI.
 - Remove unused configuration, service, and banner templates; document the native Gateway and onboarding-owned security configuration accurately. Thanks @tosin2013 for the report.
 - Update the Ansible lint toolchain and GitHub Actions dependencies, with Python 3.14 for CI.
 - Exclude checkout metadata and local Ansible caches from Docker test images so the harness also works from Git worktrees.

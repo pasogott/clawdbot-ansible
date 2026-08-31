@@ -2,6 +2,8 @@
 
 This directory contains a Docker-based CI test harness for the Ansible playbook. It validates convergence, correctness, and idempotency by running the playbook inside an Ubuntu 24.04 container.
 
+The Lint workflow runs this harness in its Installer Integration job on pushes and pull requests, alongside lint, syntax, and Docker-group security checks.
+
 ## Quick Start
 
 ```bash
