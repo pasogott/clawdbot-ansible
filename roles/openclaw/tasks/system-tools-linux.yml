@@ -1,6 +1,12 @@
 ---
 # Linux-specific system tools installation (apt-based)
 
+- name: Check for populated apt package lists
+  ansible.builtin.find:
+    paths: /var/lib/apt/lists
+    patterns: '*_Packages*'
+  register: openclaw_apt_package_lists
+
 - name: Install essential system tools (Linux - apt)
   ansible.builtin.apt:
     name:
@@ -44,7 +50,8 @@
       - file
     state: present
     update_cache: true
-    cache_valid_time: 3600
+    # Clean container images can have a recent lists directory with no package indexes.
+    cache_valid_time: "{{ 3600 if openclaw_apt_package_lists.matched > 0 else 0 }}"
 
 - name: Deploy global vim configuration (Linux)
   ansible.builtin.template:
