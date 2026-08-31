@@ -32,10 +32,13 @@
         tee /etc/apt/sources.list.d/nodesource.list > /dev/null
     creates: /etc/apt/sources.list.d/nodesource.list
     executable: /bin/bash
+  register: openclaw_nodesource_repository
 
 - name: Update apt cache after adding NodeSource repo
   ansible.builtin.apt:
     update_cache: true
+    # A newly added source needs an immediate refresh even when other lists are fresh.
+    cache_valid_time: "{{ 0 if openclaw_nodesource_repository.changed else 3600 }}"
 
 - name: Install Node.js
   ansible.builtin.apt:

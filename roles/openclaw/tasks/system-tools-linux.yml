@@ -44,6 +44,7 @@
       - file
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: Deploy global vim configuration (Linux)
   ansible.builtin.template:
