@@ -330,6 +330,7 @@ Edit `roles/openclaw/defaults/main.yml` before running the playbook.
 | `openclaw_repo_url` | `https://github.com/openclaw/openclaw.git` | Git repository (dev mode) |
 | `openclaw_repo_branch` | `main` | Git branch (dev mode) |
 | `tailscale_authkey` | `""` | Tailscale auth key for auto-connect |
+| `tailscale_ssh` | `false` | Enable Tailscale SSH (`--ssh`) when joining the tailnet |
 | `nodejs_version` | `22.x` | Node.js version to install |
 
 See [`roles/openclaw/defaults/main.yml`](roles/openclaw/defaults/main.yml) for the complete list.

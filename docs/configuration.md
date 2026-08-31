@@ -179,6 +179,15 @@ These variables only apply when `openclaw_install_mode: development`
   ```
 - **Get Key**: https://login.tailscale.com/admin/settings/keys
 
+#### `tailscale_ssh`
+- **Type**: Boolean
+- **Default**: `false` (opt-in)
+- **Description**: Passes `--ssh` to `tailscale up` when joining the tailnet, enabling [Tailscale SSH](https://tailscale.com/kb/1193/tailscale-ssh) to the node. Requires your tailnet ACLs to also permit SSH to the node (an `ssh` rule / appropriate tags) — this setting only controls the client-side flag.
+- **Example**:
+  ```bash
+  -e tailscale_ssh=true
+  ```
+
 ### OS-Specific Settings
 
 These are automatically set based on the detected OS:
