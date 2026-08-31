@@ -49,7 +49,7 @@ jobs:
         run: ansible-galaxy collection install -r requirements.yml
 
       - name: Run ansible-lint
-        run: ansible-lint playbook.yml tests/docker-group-security.yml
+        run: ansible-lint playbook.yml playbooks/*.yml tests/docker-group-security.yml
 
   syntax-check:
     name: Ansible Syntax Check
@@ -72,6 +72,8 @@ jobs:
       - name: Ansible syntax check
         run: |
           ansible-playbook playbook.yml --syntax-check
+          ansible-playbook playbooks/install.yml --syntax-check
+          ansible-playbook playbooks/deploy.yml --syntax-check
           ansible-playbook tests/docker-group-security.yml --syntax-check
 
   docker-group-security:

@@ -6,7 +6,7 @@ Ansible playbook for automated, hardened OpenClaw installation on Debian/Ubuntu 
 
 ## Key Principles
 
-1. **Security First**: Firewall must be configured before Docker installation
+1. **Security First**: Install Docker before configuring its firewall isolation
 2. **One Command Install**: `curl | bash` should work out of the box
 3. **Localhost Only**: All container ports bind to 127.0.0.1
 4. **Defense in Depth**: UFW + DOCKER-USER + localhost binding + non-root container
@@ -18,15 +18,17 @@ Docker must be installed **before** firewall configuration.
 
 Task order in `roles/openclaw/tasks/main.yml`:
 ```yaml
-- tailscale.yml  # VPN setup
-- user.yml       # Create system user
-- docker.yml     # Install Docker (creates /etc/docker)
-- firewall.yml   # Configure UFW + daemon.json (needs /etc/docker to exist)
-- nodejs.yml     # Node.js + pnpm
-- openclaw.yml   # Container setup
+- system-tools.yml     # Base system packages
+- tailscale-linux.yml  # VPN setup (when enabled)
+- user.yml             # Create system user
+- docker-linux.yml     # Install Docker and include docker-security.yml
+- firewall-linux.yml   # Configure UFW + daemon.json (needs /etc/docker to exist)
+- nodejs.yml           # Node.js + pnpm
+- openclaw.yml         # OpenClaw setup
 ```
 
-Reason: `firewall.yml` writes `/etc/docker/daemon.json` and restarts Docker service.
+Reason: `firewall-linux.yml` writes `/etc/docker/daemon.json` and restarts Docker service.
+`docker-security.yml` is nested under `docker-linux.yml`, not included directly from `main.yml`.
 
 ### DOCKER-USER Chain
 Located in `/etc/ufw/after.rules`. Uses dynamic interface detection (not hardcoded `eth0`).
@@ -86,7 +88,7 @@ curl http://localhost:80        # Should work
 
 ## Common Mistakes to Avoid
 
-1. ❌ Installing Docker before configuring firewall
+1. ❌ Configuring the firewall before installing Docker
 2. ❌ Using `0.0.0.0` port binding
 3. ❌ Hardcoding network interface names (use dynamic detection)
 4. ❌ Setting `iptables: false` in Docker daemon
