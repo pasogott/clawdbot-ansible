@@ -35,7 +35,9 @@ ansible-playbook playbook.yml --ask-become-pass
 
 ## Post-Installation
 
-### 1. Connect to Tailscale
+### 1. Connect the Selected Mesh VPN
+
+For Tailscale:
 
 ```bash
 # Interactive login
@@ -49,6 +51,21 @@ sudo tailscale status
 ```
 
 Get auth keys from: https://login.tailscale.com/admin/settings/keys
+
+For NetBird:
+
+```bash
+# NetBird Cloud
+sudo netbird up
+
+# Self-hosted NetBird
+sudo netbird up --management-url=https://netbird.example.com
+
+sudo netbird status
+```
+
+When `netbird_setup_key` is supplied, the role performs this registration
+automatically. NetBird clients do not require an inbound firewall port.
 
 ### 2. Configure OpenClaw and Install the Gateway Service
 

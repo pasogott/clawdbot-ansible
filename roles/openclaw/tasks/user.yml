@@ -1,4 +1,41 @@
 ---
+- name: Check for an existing OpenClaw sudoers policy
+  ansible.builtin.stat:
+    path: "/etc/sudoers.d/{{ openclaw_user }}"
+  register: openclaw_sudoers_policy
+  check_mode: false
+
+- name: Read the existing OpenClaw sudoers policy
+  ansible.builtin.slurp:
+    src: "/etc/sudoers.d/{{ openclaw_user }}"
+  register: openclaw_sudoers_policy_file
+  check_mode: false
+  when: openclaw_sudoers_policy.stat.exists
+
+- name: Detect the legacy Tailscale recovery grant
+  ansible.builtin.set_fact:
+    openclaw_legacy_tailscale_sudo_detected: >-
+      {{ openclaw_sudoers_policy.stat.exists
+         and '/usr/bin/tailscale up *' in
+             (openclaw_sudoers_policy_file.content
+              | default('') | b64decode) }}
+
+- name: Require explicit migration from legacy Tailscale sudo access
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (openclaw_legacy_tailscale_sudo_detected | bool)
+        or tailscale_legacy_sudo_migration_acknowledged | bool
+    fail_msg: >-
+      The existing OpenClaw sudoers policy grants passwordless `tailscale up *`
+      and `tailscale down`. This release replaces that wildcard recovery access
+      with read-only diagnostics and optional Tailscale operator delegation.
+      Confirm administrator/root recovery access, then set
+      tailscale_legacy_sudo_migration_acknowledged=true to migrate. To retain
+      service-user daemon management without sudo, also select Tailscale and
+      set tailscale_operator_enabled=true. The existing sudoers file was not
+      changed.
+
 - name: Create openclaw system user
   ansible.builtin.user:
     name: "{{ openclaw_user }}"
@@ -55,11 +92,12 @@
       # SECURITY NOTE: These permissions are intentionally limited.
       # If openclaw is compromised, attackers can only:
       # - Manage the openclaw service
-      # - Run basic tailscale diagnostics
+      # - Run read-only VPN diagnostics when Tailscale is selected
       # - View openclaw logs
       #
-      # To grant full tailscale control (e.g., for self-healing VPN):
-      #   {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
+      # Tailscale control is granted only through tailscale_operator_enabled.
+      # Do not add wildcard `tailscale up` sudo access: it can recreate an
+      # operator assignment and bypass that explicit privilege boundary.
       #
       # To grant full sudo (NOT RECOMMENDED):
       #   {{ openclaw_user }} ALL=(ALL) NOPASSWD: ALL
@@ -74,16 +112,14 @@
       # daemon-reload affects all units (required after service file changes)
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 
-      # Tailscale - diagnostics + connect/disconnect
-      # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
-      # remove 'up' and 'down' lines - operator must then manage VPN manually.
+      {% if openclaw_vpn_provider == 'tailscale' %}
+      # Tailscale - read-only diagnostics only
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
+      {% endif %}
 
       # Journal access - openclaw logs only
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *

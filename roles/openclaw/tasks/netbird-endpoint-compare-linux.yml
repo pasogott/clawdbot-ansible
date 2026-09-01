@@ -1,0 +1,57 @@
+---
+# Compare an already-read effective endpoint with the requested trust domain.
+
+- name: Resolve the requested NetBird management endpoint
+  ansible.builtin.set_fact:
+    netbird_requested_management_url: >-
+      {{ netbird_management_url
+         if netbird_management_url | length > 0
+         else 'https://api.netbird.io:443' }}
+    netbird_requested_management_source: >-
+      {{ 'netbird_management_url'
+         if netbird_management_url | length > 0
+         else 'the NetBird Cloud default' }}
+
+- name: Parse requested and effective NetBird management endpoints
+  ansible.builtin.set_fact:
+    netbird_reenrollment_command: >-
+      sudo netbird up
+      --management-url={{ netbird_requested_management_url | quote }}
+    netbird_requested_management_parts: >-
+      {{ netbird_requested_management_url | ansible.builtin.urlsplit }}
+    netbird_effective_management_parts: >-
+      {{ netbird_effective_management_url | ansible.builtin.urlsplit }}
+
+- name: Compare requested and effective NetBird management endpoints
+  ansible.builtin.set_fact:
+    netbird_management_endpoint_matches: >-
+      {{
+        (netbird_requested_management_parts.scheme | lower)
+          == (netbird_effective_management_parts.scheme | lower)
+        and (netbird_requested_management_parts.hostname | lower)
+          == (netbird_effective_management_parts.hostname | lower)
+        and (netbird_requested_management_parts.port
+             | default(443
+                       if netbird_requested_management_parts.scheme == 'https'
+                       else 80, true) | int)
+          == (netbird_effective_management_parts.port
+              | default(443
+                        if netbird_effective_management_parts.scheme == 'https'
+                        else 80, true) | int)
+        and (netbird_requested_management_parts.path
+             | default('') | regex_replace('/+$', ''))
+          == (netbird_effective_management_parts.path
+              | default('') | regex_replace('/+$', ''))
+      }}
+
+- name: Refuse automatic NetBird management service migration
+  ansible.builtin.fail:
+    msg: >-
+      NetBird is configured for '{{ netbird_effective_management_url }}', but
+      {{ netbird_requested_management_source }} requests
+      '{{ netbird_requested_management_url }}'. Refusing to move an enrolled
+      peer between management services automatically. Run `sudo netbird down`,
+      deliberately re-enroll it with
+      `{{ netbird_reenrollment_command }}` and the required credentials, then
+      rerun the playbook.
+  when: not (netbird_management_endpoint_matches | bool)

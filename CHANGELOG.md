@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add optional NetBird support and safer Tailscale authentication/operator controls; VPN migrations retain the working provider until its replacement is ready, while an empty provider preserves independently managed VPN state. Reconciliation covers stopped-daemon authority, keeps provider identities, preserves self-hosted NetBird endpoints in welcome guidance, and limits Tailscale sudo access to read-only diagnostics.
 - Fix local installation failing after package setup by removing tasks that reference the deleted banner template; run the Docker installer harness in CI.
 - Reuse fresh apt metadata on repeated installations while refreshing immediately when the NodeSource repository is added.
 - Remove unused configuration, service, and banner templates; document the native Gateway and onboarding-owned security configuration accurately. Thanks @tosin2013 for the report.

@@ -97,13 +97,8 @@
     proto: tcp
     comment: 'SSH'
 
-- name: Allow Tailscale UDP port 41641
-  community.general.ufw:
-    rule: allow
-    port: '41641'
-    proto: udp
-    comment: 'Tailscale'
-  when: tailscale_enabled | bool
+- name: Reconcile VPN firewall rules
+  ansible.builtin.include_tasks: vpn-firewall-linux.yml
 
 - name: Get default network interface
   ansible.builtin.shell:

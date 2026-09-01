@@ -2,12 +2,70 @@
 - name: Include system tools installation tasks
   ansible.builtin.include_tasks: system-tools.yml
 
-- name: Include Tailscale installation tasks
-  ansible.builtin.include_tasks: tailscale-linux.yml
-  when: tailscale_enabled | bool
+- name: Validate VPN provider selection
+  ansible.builtin.assert:
+    that:
+      - vpn_provider in ['', 'tailscale', 'netbird']
+      - >-
+        not (vpn_provider == 'netbird'
+        and (tailscale_enabled | bool
+        or tailscale_authkey | length > 0
+        or tailscale_operator_enabled | bool))
+      - >-
+        vpn_provider == 'netbird'
+        or (netbird_setup_key | length == 0
+        and netbird_management_url | length == 0)
+    fail_msg: >-
+      vpn_provider must be '', 'tailscale', or 'netbird', and credentials must
+      match the selected provider. Do not combine NetBird with Tailscale
+      settings or provide NetBird settings without vpn_provider=netbird.
+
+- name: Validate self-hosted NetBird management URL
+  ansible.builtin.assert:
+    that:
+      - (netbird_management_url | ansible.builtin.urlsplit('scheme')) in ['http', 'https']
+      - netbird_management_url | ansible.builtin.urlsplit('hostname') | length > 0
+      - netbird_management_url | ansible.builtin.urlsplit('username') is none
+      - netbird_management_url | ansible.builtin.urlsplit('password') is none
+      - netbird_management_url | ansible.builtin.urlsplit('query') | length == 0
+      - netbird_management_url | ansible.builtin.urlsplit('fragment') | length == 0
+    fail_msg: >-
+      netbird_management_url must be an absolute HTTP(S) management service
+      URL without credentials, a query string, or a fragment.
+  when: netbird_management_url | length > 0
+
+- name: Resolve effective VPN provider
+  ansible.builtin.set_fact:
+    openclaw_vpn_provider: >-
+      {{ vpn_provider if vpn_provider | length > 0
+         else ('tailscale'
+               if tailscale_enabled | bool
+               or tailscale_authkey | length > 0
+               or tailscale_operator_enabled | bool
+               else '') }}
+
+- name: Default selected VPN readiness
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: false
 
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml
+
+- name: Provision the selected VPN provider
+  ansible.builtin.include_tasks: vpn-provision-linux.yml
+
+- name: Reconcile Tailscale operator access
+  ansible.builtin.include_tasks: tailscale-operator-linux.yml
+  when:
+    - not ci_test
+    - openclaw_vpn_provider == 'tailscale'
+    - tailscale_operator_enabled | bool
+
+# Install and verify the selected provider before stopping the previous one.
+# Obsolete OpenClaw-owned operator authority was revoked before provisioning.
+- name: Reconcile inactive VPN services
+  ansible.builtin.include_tasks: vpn-reconcile-linux.yml
+  when: not ci_test
 
 - name: Include Docker installation tasks
   ansible.builtin.include_tasks: docker-linux.yml

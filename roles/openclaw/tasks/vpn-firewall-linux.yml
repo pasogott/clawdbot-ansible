@@ -1,0 +1,20 @@
+---
+# Removing an allow task does not remove its persistent UFW rule. Retain the
+# rule while a previous Tailscale connection protects an in-progress migration.
+
+- name: Determine whether Tailscale still needs its UDP allowance
+  ansible.builtin.set_fact:
+    openclaw_tailscale_firewall_required: >-
+      {{ openclaw_vpn_provider == 'tailscale'
+         or ('tailscaled.service' in (ansible_facts.services | default({}))
+             and ansible_facts.services['tailscaled.service'].state == 'running') }}
+
+- name: Reconcile Tailscale UDP port 41641
+  community.general.ufw:
+    rule: allow
+    port: '41641'
+    proto: udp
+    comment: Tailscale
+    delete: "{{ not (openclaw_tailscale_firewall_required | bool) }}"
+  register: tailscale_firewall_rule
+  when: openclaw_vpn_provider | length > 0

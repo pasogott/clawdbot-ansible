@@ -1,0 +1,34 @@
+---
+# Moving an enrolled peer between management services changes its trust domain.
+# Detect drift, but require an operator to perform that migration deliberately.
+
+- name: Read the effective NetBird client configuration
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - '15'
+      - netbird
+      - debug
+      - config
+  register: netbird_effective_config
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Fail safely when the NetBird management endpoint cannot be verified
+  ansible.builtin.fail:
+    msg: >-
+      NetBird has an existing profile, but its effective management endpoint
+      could not be verified. No control-plane migration was attempted. Update
+      the NetBird client so `sudo netbird debug config` is available, verify
+      its managementUrl, and rerun the playbook.
+  when: (netbird_effective_config.rc | default(1)) != 0
+
+- name: Parse the daemon's effective NetBird management endpoint
+  ansible.builtin.set_fact:
+    netbird_effective_management_url: >-
+      {{ (netbird_effective_config.stdout | from_json).managementUrl
+         | default('') }}
+
+- name: Compare the daemon endpoint with the requested trust domain
+  ansible.builtin.include_tasks: netbird-endpoint-compare-linux.yml

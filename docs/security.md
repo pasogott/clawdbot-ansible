@@ -19,10 +19,45 @@ Incoming: DENY
 Outgoing: ALLOW
 Routed: DENY
 
-# Allowed
+# Always allowed
 SSH (22/tcp): ALLOW
+
+# Allowed only when Tailscale is selected
 Tailscale (41641/udp): ALLOW
 ```
+
+NetBird clients initiate connections outbound and do not require an inbound UFW
+port. NetBird manages access on its tunnel interface after connection.
+The role pins NetBird's Debian repository signing-key fingerprint, validates
+both an existing keyring and every downloaded replacement, and promotes a
+replacement atomically only after the signer matches. A different valid
+OpenPGP key is rejected and cannot become an APT trust root.
+
+Changing `vpn_provider` converges both daemon and firewall state without
+cutting off a working remote path. The role keeps the deselected VPN and its
+firewall allowance active until the replacement reports that it is connected
+and ready. It then stops and disables the old service and removes the Tailscale
+UDP allowance when no running Tailscale service needs it. Packages and local
+provider identities remain intact so an intentional migration can be reversed.
+When no provider is configured, the role preserves detected VPN daemons and
+their firewall/operator state so an ordinary upgrade cannot take ownership of
+or disconnect an independently managed remote-access path.
+
+Tailscale operator access is reconciled as a persistent privilege. Enabling it
+grants the OpenClaw account local daemon control only when no other operator is
+assigned. Disabling it, or selecting another VPN, revokes an OpenClaw-owned
+grant while preserving a delegation assigned to any other account. An
+installed but stopped Tailscale daemon is started temporarily for this check
+and returned to its stopped state even when reconciliation fails.
+The generated sudoers policy permits only read-only Tailscale diagnostics; it
+does not permit `tailscale up` or `tailscale down`, so it cannot bypass operator
+opt-out or recreate daemon-control authority. Earlier releases did grant those
+passwordless recovery commands. On upgrade, the role refuses to overwrite a
+managed sudoers file containing them until an administrator verifies an
+independent recovery path and sets
+`tailscale_legacy_sudo_migration_acknowledged: true`. Use scoped
+`tailscale_operator_enabled` delegation when the OpenClaw account still needs
+daemon control.
 
 ### Layer 2: Fail2ban (SSH Protection)
 
@@ -90,7 +125,7 @@ The openclaw user has limited sudo permissions (not full root):
 # Allowed commands only:
 - systemctl start/stop/restart/status openclaw
 - systemctl daemon-reload
-- tailscale commands
+- tailscale commands (only when Tailscale is selected)
 - journalctl for openclaw logs
 ```
 
@@ -189,6 +224,15 @@ sudo tailscale status
 
 When Tailscale is enabled, expected: the server has a `100.x.x.x` Tailscale address and appears in the peer table. `Logged out` or `Stopped` means `sudo tailscale up` still needs to be completed. Skip this check when `tailscale_enabled` is false.
 
+### NetBird
+
+```bash
+sudo netbird status --check startup
+```
+
+When NetBird is selected, expected: the command exits successfully. No inbound
+UFW rule is required for a NetBird client.
+
 ### Automatic Security Updates
 
 ```bash
@@ -235,13 +279,13 @@ Container → NAT → Internet (outbound allowed)
 
 After installation, verify:
 
-- [ ] `sudo ufw status` shows only SSH and Tailscale allowed
+- [ ] `sudo ufw status` shows SSH and, only when selected, Tailscale UDP
 - [ ] `sudo fail2ban-client status sshd` shows jail active
 - [ ] `sudo iptables -L DOCKER-USER -n` shows DROP rule
 - [ ] `id -nG openclaw` does not include the `docker` group
 - [ ] `nmap -p- YOUR_IP` from external shows only port 22
 - [ ] `docker run -p 80:80 nginx` + `curl YOUR_IP:80` times out
-- [ ] Tailscale access works for web UI
+- [ ] The selected mesh VPN reports a healthy connection
 
 ## Reporting Security Issues
 

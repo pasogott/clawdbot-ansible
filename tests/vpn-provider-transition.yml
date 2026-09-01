@@ -1,0 +1,1029 @@
+---
+- name: Verify VPN provider transitions on a disposable Linux host
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    openclaw_user: root
+    openclaw_home: /tmp/openclaw-vpn-transition
+
+  tasks:
+    - name: Create disposable OpenClaw home
+      ansible.builtin.file:
+        path: "{{ openclaw_home }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_user }}"
+        mode: '0755'
+
+    - name: Install UFW for transition verification
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: true
+
+    - name: Set safe UFW policies for the disposable runner
+      community.general.ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+
+    - name: Enable UFW on the disposable runner
+      community.general.ufw:
+        state: enabled
+
+    - name: Configure a fresh NetBird dry run
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+        netbird_management_url: https://netbird.example.test
+
+    - name: Exercise fresh NetBird provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+        apply:
+          check_mode: true
+
+    - name: Assert pending NetBird repository setup is tolerated
+      ansible.builtin.assert:
+        that:
+          - netbird_repository.changed
+          - netbird_package_install.skipped | default(false)
+          - netbird_service.skipped | default(false)
+          - not (netbird_authenticated.skipped | default(false))
+          - (netbird_authenticated.rc | default(0)) != 0
+          - not (openclaw_selected_vpn_ready | bool)
+
+    - name: Seed an invalid NetBird keyring from an interrupted installation
+      ansible.builtin.copy:
+        dest: /usr/share/keyrings/netbird-archive-keyring.gpg
+        content: interrupted-download
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Select a valid but unapproved OpenPGP key for the negative test
+      ansible.builtin.set_fact:
+        netbird_repository_key_url: >-
+          file:///usr/share/keyrings/ubuntu-archive-keyring.gpg
+        netbird_foreign_signing_key_rejected: false
+
+    - name: Prove a different valid signing key is rejected
+      block:
+        - name: Attempt NetBird provisioning with an unapproved signing key
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected signing-key rejection
+          ansible.builtin.set_fact:
+            netbird_foreign_signing_key_rejected: >-
+              {{
+                'fingerprint mismatch'
+                in (ansible_failed_result.stderr
+                    | default(ansible_failed_result.msg | default('')))
+              }}
+
+    - name: Read the keyring after the rejected signing-key download
+      ansible.builtin.slurp:
+        src: /usr/share/keyrings/netbird-archive-keyring.gpg
+      register: netbird_keyring_after_foreign_key
+
+    - name: Assert the foreign key was rejected before atomic promotion
+      ansible.builtin.assert:
+        that:
+          - netbird_foreign_signing_key_rejected | bool
+          - >-
+            netbird_keyring_after_foreign_key.content | b64decode ==
+            'interrupted-download'
+
+    - name: Restore the official NetBird signing-key source
+      ansible.builtin.set_fact:
+        netbird_repository_key_url: https://pkgs.netbird.io/debian/public.key
+
+    - name: Seed an unchanged NetBird repository from an interrupted attempt
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/netbird.list
+        content: >-
+          deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg]
+          https://pkgs.netbird.io/debian stable main
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Find cached NetBird package indexes
+      ansible.builtin.find:
+        paths: /var/lib/apt/lists
+        patterns: '*pkgs.netbird.io*'
+        file_type: file
+      register: cached_netbird_package_indexes
+
+    - name: Remove cached NetBird package indexes from the interrupted attempt
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cached_netbird_package_indexes.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Select NetBird for initial provisioning
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+        netbird_management_url: https://netbird.example.test
+
+    - name: Provision the real NetBird package and daemon
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+
+    - name: Validate the repaired NetBird signing key
+      ansible.builtin.command:
+        argv:
+          - gpg
+          - --batch
+          - --with-colons
+          - --show-keys
+          - --fingerprint
+          - /usr/share/keyrings/netbird-archive-keyring.gpg
+      register: repaired_netbird_signing_key
+      changed_when: false
+
+    - name: Assert the interrupted keyring was repaired
+      ansible.builtin.assert:
+        that:
+          - repaired_netbird_signing_key.rc == 0
+          - netbird_signing_key.rc != 0
+          - not netbird_repository.changed
+          - netbird_package_install.changed
+          - >-
+            'fpr:::::::::EFE37DF047DF7CCDF1FC54FA83F79AD029778355:'
+            in repaired_netbird_signing_key.stdout
+
+    - name: Assert self-hosted manual setup keeps its management endpoint
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - >-
+            openclaw_vpn_connect_command ==
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+          - >-
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+            in netbird_manual_guidance.msg
+
+    - name: Check the keyless first-run NetBird profile path
+      ansible.builtin.stat:
+        path: /var/lib/netbird/default.json
+      register: netbird_keyless_profile
+
+    - name: Assert keyless setup did not retain an unenrolled Cloud profile
+      ansible.builtin.assert:
+        that:
+          - not netbird_keyless_profile.stat.exists
+
+    - name: Create a setup-key retry fixture directory
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-setup-key-retry-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the setup-key retry fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-netbird-setup-key-retry-bin/netbird
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status; then
+            echo 'Daemon status: NeedsLogin'
+            exit 1
+          fi
+          if test "$1" = up; then
+            touch /tmp/openclaw-netbird-setup-key-retry-attempted
+            exit 1
+          fi
+          exec /usr/bin/netbird "$@"
+
+    - name: Remove the setup-key retry observation marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-setup-key-retry-attempted
+        state: absent
+
+    - name: Configure unattended retry after keyless setup
+      ansible.builtin.set_fact:
+        netbird_setup_key: setup-key-check-placeholder
+        netbird_setup_key_retry_failed: false
+
+    - name: Exercise setup-key retry after keyless setup
+      block:
+        - name: Run provisioning with the later setup key
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+            apply:
+              environment:
+                PATH: >-
+                  {{ '/tmp/openclaw-netbird-setup-key-retry-bin:'
+                     ~ ansible_env.PATH }}
+      rescue:
+        - name: Record the expected placeholder setup-key failure
+          ansible.builtin.set_fact:
+            netbird_setup_key_retry_failed: true
+            netbird_setup_key_retry_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Check whether the later setup key reached NetBird
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-setup-key-retry-attempted
+      register: netbird_setup_key_retry_attempted
+
+    - name: Assert keyless setup can converge on a setup-key rerun
+      ansible.builtin.assert:
+        that:
+          - netbird_setup_key_retry_failed
+          - netbird_setup_key_retry_attempted.stat.exists
+          - >-
+            'could not connect' in
+            (netbird_setup_key_retry_message | lower)
+          - >-
+            'NetBird is configured for' not in
+            netbird_setup_key_retry_message
+
+    - name: Remove the setup-key retry fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/openclaw-netbird-setup-key-retry-bin
+        - /tmp/openclaw-netbird-setup-key-retry-attempted
+
+    - name: Clear the setup-key retry fixture
+      ansible.builtin.set_fact:
+        netbird_setup_key: ""
+
+    - name: Record NetBird service state before its dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_check
+      changed_when: false
+
+    - name: Exercise configured NetBird provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+        apply:
+          check_mode: true
+
+    - name: Record NetBird service state after its dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_check
+      changed_when: false
+
+    - name: Assert NetBird probes run without mutating the dry-run host
+      ansible.builtin.assert:
+        that:
+          - not (netbird_authenticated.skipped | default(false))
+          - netbird_authenticated.rc is defined
+          - netbird_state_after_check.stdout == netbird_state_before_check.stdout
+
+    - name: Render the production welcome message
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: welcome-message-linux
+
+    - name: Read the rendered welcome message
+      ansible.builtin.slurp:
+        src: "{{ openclaw_home }}/.openclaw-welcome"
+      register: rendered_welcome_message
+
+    - name: Assert self-hosted welcome keeps its management endpoint
+      ansible.builtin.assert:
+        that:
+          - >-
+            'sudo netbird up
+            --management-url=https://netbird.example.test'
+            in (rendered_welcome_message.content | b64decode)
+
+    - name: Remove the welcome-rendering injection marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-welcome-injection
+        state: absent
+
+    - name: Configure a literal-safety welcome fixture
+      ansible.builtin.set_fact:
+        openclaw_vpn_connect_command: >-
+          sudo netbird up
+          --management-url='https://netbird.example.test/$(touch${IFS}/tmp/openclaw-netbird-welcome-injection)'
+
+    - name: Render the literal-safety welcome fixture
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: welcome-message-linux
+
+    - name: Source the literal-safety welcome fixture
+      ansible.builtin.command:
+        argv:
+          - /bin/bash
+          - "{{ openclaw_home }}/.openclaw-welcome"
+      register: literal_safe_welcome
+      changed_when: false
+
+    - name: Check whether welcome rendering executed configuration text
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-welcome-injection
+      register: welcome_injection_marker
+
+    - name: Assert the NetBird command was rendered as literal text
+      ansible.builtin.assert:
+        that:
+          - not welcome_injection_marker.stat.exists
+          - openclaw_vpn_connect_command in literal_safe_welcome.stdout
+
+    - name: Regenerate a disposable NetBird profile for drift tests
+      ansible.builtin.systemd:
+        name: netbird
+        state: restarted
+
+    - name: Seed a disposable local NetBird profile for drift tests
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - '5'
+          - netbird
+          - up
+          - --management-url=https://127.0.0.1:1
+      changed_when: true
+      failed_when: false
+
+    - name: Default endpoint-drift rejection observation
+      ansible.builtin.set_fact:
+        netbird_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: true
+
+    - name: Exercise connected-client endpoint-drift rejection
+      block:
+        - name: Compare the real client's endpoint to requested configuration
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-endpoint-linux
+            apply:
+              check_mode: true
+      rescue:
+        - name: Record the expected endpoint-drift refusal
+          ansible.builtin.set_fact:
+            netbird_endpoint_drift_rejected: true
+
+    - name: Assert connected endpoint drift is rejected before mutation
+      ansible.builtin.assert:
+        that:
+          - netbird_endpoint_drift_rejected
+          - not (netbird_effective_config.skipped | default(false))
+          - netbird_effective_config.rc == 0
+          - netbird_effective_management_url != netbird_management_url
+
+    # A login override is persisted before NetBird attempts control-plane
+    # authentication. Use an unreachable local endpoint to model an existing
+    # self-hosted profile without enrolling the hosted runner anywhere.
+    - name: Seed a disposable self-hosted NetBird management endpoint
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - '5'
+          - netbird
+          - up
+          - --management-url=https://127.0.0.1:1
+      register: netbird_self_hosted_seed
+      changed_when: true
+      failed_when: false
+
+    - name: Stop the disposable NetBird connection attempt
+      ansible.builtin.command: netbird down
+      changed_when: true
+      failed_when: false
+
+    - name: Select NetBird Cloud over the existing self-hosted profile
+      ansible.builtin.set_fact:
+        netbird_management_url: ""
+        netbird_cloud_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: true
+
+    - name: Exercise self-hosted to NetBird Cloud drift rejection
+      block:
+        - name: Compare the self-hosted profile to the Cloud default
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-endpoint-linux
+            apply:
+              check_mode: true
+      rescue:
+        - name: Record the expected NetBird Cloud drift refusal
+          ansible.builtin.set_fact:
+            netbird_cloud_endpoint_drift_rejected: true
+            netbird_cloud_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Assert clearing a self-hosted endpoint requires re-enrollment
+      ansible.builtin.assert:
+        that:
+          - netbird_cloud_endpoint_drift_rejected
+          - netbird_requested_management_url == 'https://api.netbird.io:443'
+          - netbird_requested_management_source == 'the NetBird Cloud default'
+          - netbird_effective_management_parts.hostname == '127.0.0.1'
+          - >-
+            'sudo netbird up
+            --management-url=https://api.netbird.io:443'
+            in netbird_cloud_endpoint_drift_message
+
+    - name: Record running but unhealthy NetBird state before validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_running_drift
+      changed_when: false
+
+    - name: Default running-profile drift rejection observation
+      ansible.builtin.set_fact:
+        netbird_running_endpoint_drift_rejected: false
+
+    - name: Exercise running but unhealthy profile endpoint-drift rejection
+      block:
+        - name: Run production provisioning over the unhealthy profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected running-profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_running_endpoint_drift_rejected: true
+            netbird_running_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Record running but unhealthy NetBird state after validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_running_drift
+      changed_when: false
+
+    - name: Assert unhealthy profile drift is rejected before mutation
+      ansible.builtin.assert:
+        that:
+          - netbird_profile_preexisting | bool
+          - "'ActiveState=active' in netbird_state_before_running_drift.stdout"
+          - netbird_running_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_running_endpoint_drift_message
+          - >-
+            netbird_state_after_running_drift.stdout ==
+            netbird_state_before_running_drift.stdout
+
+    - name: Create a NeedsLogin NetBird status fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-needs-login-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the NeedsLogin NetBird status fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-netbird-needs-login-bin/netbird
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status; then
+            echo 'Daemon status: NeedsLogin'
+            exit 1
+          fi
+          if test "$1" = up; then
+            touch /tmp/openclaw-netbird-unexpected-up
+          fi
+          exec /usr/bin/netbird "$@"
+
+    - name: Remove the setup-key command observation marker
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-unexpected-up
+        state: absent
+
+    - name: Record NetBird state before NeedsLogin validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_needs_login_drift
+      changed_when: false
+
+    - name: Configure keyless reconnect over a NeedsLogin profile
+      ansible.builtin.set_fact:
+        netbird_setup_key: ""
+        netbird_needs_login_endpoint_drift_rejected: false
+
+    - name: Exercise NeedsLogin profile endpoint-drift rejection
+      block:
+        - name: Run provisioning over the NeedsLogin profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+            apply:
+              environment:
+                PATH: >-
+                  {{ '/tmp/openclaw-netbird-needs-login-bin:'
+                     ~ ansible_env.PATH }}
+      rescue:
+        - name: Record the expected NeedsLogin profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_needs_login_endpoint_drift_rejected: true
+            netbird_needs_login_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Record NetBird state after NeedsLogin validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_needs_login_drift
+      changed_when: false
+
+    - name: Check whether setup-key enrollment was attempted
+      ansible.builtin.stat:
+        path: /tmp/openclaw-netbird-unexpected-up
+      register: netbird_unexpected_up
+
+    - name: Assert NeedsLogin drift is rejected before manual reconnect
+      ansible.builtin.assert:
+        that:
+          - netbird_needs_login_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_needs_login_endpoint_drift_message
+          - not netbird_unexpected_up.stat.exists
+          - >-
+            netbird_state_after_needs_login_drift.stdout ==
+            netbird_state_before_needs_login_drift.stdout
+
+    - name: Remove the NeedsLogin NetBird status fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-netbird-needs-login-bin
+        state: absent
+
+    - name: Stop and disable the existing NetBird profile fixture
+      ansible.builtin.systemd:
+        name: netbird
+        state: stopped
+        enabled: false
+
+    - name: Record NetBird state before persisted-endpoint validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_before_stopped_drift
+      changed_when: false
+
+    - name: Configure setup-key re-enrollment over the stopped profile
+      ansible.builtin.set_fact:
+        netbird_setup_key: setup-key-check-placeholder
+        netbird_stopped_endpoint_drift_rejected: false
+        openclaw_selected_vpn_ready: false
+
+    - name: Exercise stopped-profile endpoint-drift rejection
+      block:
+        - name: Run production NetBird provisioning over the stopped profile
+          ansible.builtin.include_role:
+            name: openclaw
+            tasks_from: netbird-linux
+      rescue:
+        - name: Record the expected stopped-profile drift refusal
+          ansible.builtin.set_fact:
+            netbird_stopped_endpoint_drift_rejected: true
+            netbird_stopped_endpoint_drift_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Record NetBird state after persisted-endpoint validation
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - netbird.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: netbird_state_after_stopped_drift
+      changed_when: false
+
+    - name: Assert drift is rejected before stopped-profile re-enrollment
+      ansible.builtin.assert:
+        that:
+          - netbird_profile_preexisting | bool
+          - netbird_stopped_endpoint_drift_rejected
+          - >-
+            'NetBird is configured for' in
+            netbird_stopped_endpoint_drift_message
+          - >-
+            'https://api.netbird.io:443' in
+            netbird_stopped_endpoint_drift_message
+          - >-
+            netbird_state_after_stopped_drift.stdout ==
+            netbird_state_before_stopped_drift.stdout
+
+    - name: Clear the placeholder NetBird setup key
+      ansible.builtin.set_fact:
+        netbird_setup_key: ""
+
+    - name: Restore the NetBird service transition fixture
+      ansible.builtin.systemd:
+        name: netbird
+        state: started
+        enabled: true
+
+    - name: Restore actual NetBird readiness for transition testing
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: false
+
+    - name: Reconcile initial NetBird service state
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile initial NetBird firewall state
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Select Tailscale
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: tailscale
+
+    - name: Supply a placeholder key for a fresh Tailscale dry run
+      ansible.builtin.set_fact:
+        tailscale_authkey: tskey-auth-check-mode-placeholder
+
+    - name: Exercise fresh Tailscale provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          check_mode: true
+
+    - name: Assert pending Tailscale repository setup is tolerated
+      ansible.builtin.assert:
+        that:
+          - tailscale_repository.changed
+          - tailscale_package_install.skipped | default(false)
+          - tailscale_service.skipped | default(false)
+          - not (tailscale_status_linux.skipped | default(false))
+          - (tailscale_status_linux.rc | default(0)) != 0
+          - tailscale_join.skipped | default(false)
+          - not (openclaw_selected_vpn_ready | bool)
+
+    - name: Clear the fresh-run placeholder Tailscale auth key
+      ansible.builtin.set_fact:
+        tailscale_authkey: ""
+
+    - name: Provision the real Tailscale package and daemon
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+
+    - name: Create a running-but-offline Tailscale fixture directory
+      ansible.builtin.file:
+        path: /tmp/openclaw-tailscale-offline-bin
+        state: directory
+        mode: '0755'
+
+    - name: Install the running-but-offline Tailscale fixture
+      ansible.builtin.copy:
+        dest: /tmp/openclaw-tailscale-offline-bin/tailscale
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          if test "$1" = status && test "$2" = --json; then
+            cat <<'EOF'
+          {
+            "BackendState": "Running",
+            "Self": {"Online": false},
+            "Health": ["control plane is unreachable"]
+          }
+          EOF
+            exit 0
+          fi
+          exec /usr/bin/tailscale "$@"
+
+    - name: Exercise running-but-offline Tailscale readiness
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          environment:
+            PATH: >-
+              {{ '/tmp/openclaw-tailscale-offline-bin:'
+                 ~ ansible_env.PATH }}
+
+    - name: Assert offline Tailscale cannot retire the working VPN
+      ansible.builtin.assert:
+        that:
+          - tailscale_backend_state == 'Running'
+          - not (tailscale_self_online | bool)
+          - tailscale_health_issues | length == 1
+          - not (openclaw_selected_vpn_ready | bool)
+
+    - name: Remove the running-but-offline Tailscale fixture
+      ansible.builtin.file:
+        path: /tmp/openclaw-tailscale-offline-bin
+        state: absent
+
+    - name: Record Tailscale service state before its auth-key dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - tailscaled.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: tailscale_state_before_check
+      changed_when: false
+
+    - name: Supply a placeholder auth key for check-mode coverage
+      ansible.builtin.set_fact:
+        tailscale_authkey: tskey-auth-check-mode-placeholder
+
+    - name: Exercise Tailscale auth-key provisioning in check mode
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: tailscale-linux
+        apply:
+          check_mode: true
+
+    - name: Record Tailscale service state after its auth-key dry run
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - tailscaled.service
+          - --property=ActiveState
+          - --property=UnitFileState
+          - --property=ActiveEnterTimestampMonotonic
+      register: tailscale_state_after_check
+      changed_when: false
+
+    - name: Assert Tailscale probes run and auth-key login stays dry
+      ansible.builtin.assert:
+        that:
+          - not (tailscale_status_linux.skipped | default(false))
+          - tailscale_status_linux.rc is defined
+          - tailscale_backend_state == 'NeedsLogin'
+          - tailscale_join is defined
+          - tailscale_join.skipped | default(false)
+          - tailscale_state_after_check.stdout == tailscale_state_before_check.stdout
+
+    - name: Clear the placeholder Tailscale auth key
+      ansible.builtin.set_fact:
+        tailscale_authkey: ""
+
+    - name: Attempt NetBird to unready Tailscale transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state during unready Tailscale transition
+      ansible.builtin.command: ufw status
+      register: ufw_during_tailscale_transition
+      changed_when: false
+
+    - name: Probe retained NetBird daemon
+      ansible.builtin.command: systemctl is-active netbird.service
+      register: netbird_during_tailscale_transition
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unready Tailscale does not displace NetBird
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - ansible_facts.services['tailscaled.service'].state == 'running'
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - netbird_during_tailscale_transition.rc == 0
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - "'41641/udp' in ufw_during_tailscale_transition.stdout"
+
+    # The hosted test intentionally uses no private-network credentials. Mark
+    # readiness only after proving the production task detected the unready
+    # state and retained the old connection.
+    - name: Simulate completed Tailscale authentication
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: true
+
+    - name: Complete NetBird to ready Tailscale transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reconcile completed Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Probe deselected NetBird daemon
+      ansible.builtin.command: systemctl is-active netbird.service
+      register: netbird_after_tailscale
+      changed_when: false
+      failed_when: false
+
+    - name: Assert NetBird to ready Tailscale convergence
+      ansible.builtin.assert:
+        that:
+          - netbird_after_tailscale.rc != 0
+          - ansible_facts.services['netbird.service'].status == 'disabled'
+
+    - name: Reapply Tailscale service reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reapply Tailscale firewall reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Assert Tailscale state is idempotent
+      ansible.builtin.assert:
+        that:
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed
+
+    - name: Select NetBird again
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: netbird
+        netbird_management_url: https://127.0.0.1:1
+
+    - name: Restart the selected NetBird provider
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: netbird-linux
+
+    - name: Attempt Tailscale to unready NetBird transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Retain Tailscale firewall allowance during migration
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state during unready NetBird transition
+      ansible.builtin.command: ufw status
+      register: ufw_during_netbird_transition
+      changed_when: false
+
+    - name: Probe retained Tailscale daemon
+      ansible.builtin.command: systemctl is-active tailscaled.service
+      register: tailscale_during_netbird_transition
+      changed_when: false
+      failed_when: false
+
+    - name: Assert unready NetBird does not displace Tailscale
+      ansible.builtin.assert:
+        that:
+          - not (openclaw_selected_vpn_ready | bool)
+          - ansible_facts.services['netbird.service'].state == 'running'
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - tailscale_during_netbird_transition.rc == 0
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - "'41641/udp' in ufw_during_netbird_transition.stdout"
+
+    - name: Simulate completed NetBird authentication
+      ansible.builtin.set_fact:
+        openclaw_selected_vpn_ready: true
+
+    - name: Complete Tailscale to ready NetBird transition
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Remove stale Tailscale firewall allowance
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read UFW state after selecting NetBird
+      ansible.builtin.command: ufw status
+      register: ufw_after_netbird
+      changed_when: false
+
+    - name: Probe deselected Tailscale daemon
+      ansible.builtin.command: systemctl is-active tailscaled.service
+      register: tailscale_after_netbird
+      changed_when: false
+      failed_when: false
+
+    - name: Assert Tailscale to ready NetBird convergence
+      ansible.builtin.assert:
+        that:
+          - tailscale_after_netbird.rc != 0
+          - ansible_facts.services['tailscaled.service'].status == 'disabled'
+          - "'41641/udp' not in ufw_after_netbird.stdout"
+
+    - name: Reapply NetBird service reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Reapply NetBird firewall reconciliation
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Assert NetBird state is idempotent
+      ansible.builtin.assert:
+        that:
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed
+
+    - name: Simulate an independently managed Tailscale daemon
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: started
+        enabled: true
+
+    - name: Simulate its existing UFW allowance
+      community.general.ufw:
+        rule: allow
+        port: '41641'
+        proto: udp
+        comment: Tailscale
+
+    - name: Clear provider selection as on a legacy unconfigured upgrade
+      ansible.builtin.set_fact:
+        openclaw_vpn_provider: ""
+        openclaw_selected_vpn_ready: false
+
+    - name: Reconcile an unconfigured upgrade
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-reconcile-linux
+
+    - name: Preserve firewall state on an unconfigured upgrade
+      ansible.builtin.include_role:
+        name: openclaw
+        tasks_from: vpn-firewall-linux
+
+    - name: Read preserved UFW state
+      ansible.builtin.command: ufw status
+      register: ufw_after_unconfigured_upgrade
+      changed_when: false
+
+    - name: Assert unconfigured upgrade preserves existing providers
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['netbird.service'].state == 'running'
+          - ansible_facts.services['netbird.service'].status == 'enabled'
+          - ansible_facts.services['tailscaled.service'].state == 'running'
+          - ansible_facts.services['tailscaled.service'].status == 'enabled'
+          - "'41641/udp' in ufw_after_unconfigured_upgrade.stdout"
+          - not inactive_vpn_services.changed
+          - not tailscale_firewall_rule.changed

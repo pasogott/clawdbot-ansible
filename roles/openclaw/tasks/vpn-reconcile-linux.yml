@@ -1,0 +1,48 @@
+---
+# Keep packages and provider identity state so migrations remain reversible,
+# but permit only the selected VPN daemon to remain active at boot or runtime.
+
+- name: Gather VPN service state
+  ansible.builtin.service_facts:
+
+- name: Stop and disable inactive VPN services
+  ansible.builtin.systemd:
+    name: "{{ item.service }}"
+    state: stopped
+    enabled: false
+  loop:
+    - provider: tailscale
+      service: tailscaled.service
+    - provider: netbird
+      service: netbird.service
+  loop_control:
+    label: "{{ item.provider }}"
+  register: inactive_vpn_services
+  when:
+    - openclaw_selected_vpn_ready | default(false) | bool
+    - item.provider != openclaw_vpn_provider
+    - item.service in ansible_facts.services
+
+- name: Explain why the previous VPN remains active
+  ansible.builtin.debug:
+    msg: >-
+      {{ openclaw_vpn_provider | capitalize }} is installed but not ready, so
+      the existing {{ item.provider | capitalize }} service remains active to
+      protect remote access. Authenticate {{ openclaw_vpn_provider | capitalize }}
+      and rerun the playbook to complete the migration.
+  loop:
+    - provider: tailscale
+      service: tailscaled.service
+    - provider: netbird
+      service: netbird.service
+  loop_control:
+    label: "{{ item.provider }}"
+  when:
+    - openclaw_vpn_provider | length > 0
+    - not (openclaw_selected_vpn_ready | default(false) | bool)
+    - item.provider != openclaw_vpn_provider
+    - item.service in ansible_facts.services
+    - ansible_facts.services[item.service].state == 'running'
+
+- name: Refresh VPN service state after reconciliation
+  ansible.builtin.service_facts:

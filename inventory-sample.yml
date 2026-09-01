@@ -21,5 +21,12 @@ all:
     # openclaw_ssh_keys:
     #   - "ssh-ed25519 AAAAC3Nz..."
 
-    # Tailscale Auth Key (Optional) - Leave empty to skip auto-connect
+    # Optional VPN provider: "tailscale", "netbird", or "" for none
+    # vpn_provider: "netbird"
+
+    # Tailscale Auth Key (when using Tailscale)
     # tailscale_authkey: "tskey-auth-..."
+
+    # NetBird Setup Key (when using NetBird)
+    # netbird_setup_key: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    # netbird_management_url: "https://netbird.example.com"  # self-hosted only

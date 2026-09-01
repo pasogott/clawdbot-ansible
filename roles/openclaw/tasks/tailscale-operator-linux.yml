@@ -1,0 +1,107 @@
+---
+# Tailscale persists a single local operator. Grant only by explicit opt-in,
+# revoke OpenClaw's own grant on opt-out/provider changes, and never replace or
+# remove a delegation belonging to another local account.
+
+- name: Gather Tailscale service state for operator reconciliation
+  ansible.builtin.service_facts:
+
+- name: Record whether Tailscale was already running
+  ansible.builtin.set_fact:
+    tailscale_operator_service_present: >-
+      {{ 'tailscaled.service' in ansible_facts.services }}
+    tailscale_operator_service_was_running: >-
+      {{ 'tailscaled.service' in ansible_facts.services
+         and ansible_facts.services['tailscaled.service'].state == 'running' }}
+
+- name: Start Tailscale temporarily for persisted operator reconciliation
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: started
+  register: tailscale_operator_service_start
+  when:
+    - tailscale_operator_service_present | bool
+    - not (tailscale_operator_service_was_running | bool)
+    - openclaw_vpn_provider | length > 0
+
+- name: Reconcile persisted Tailscale operator authority
+  block:
+    - name: Refresh Tailscale service state for operator reconciliation
+      ansible.builtin.service_facts:
+
+    - name: Read the current Tailscale operator
+      ansible.builtin.command: tailscale get operator
+      register: tailscale_operator_current
+      changed_when: false
+      failed_when: false
+      when:
+        - "'tailscaled.service' in ansible_facts.services"
+        - ansible_facts.services['tailscaled.service'].state == 'running'
+
+    - name: Fail safely when the current Tailscale operator cannot be read
+      ansible.builtin.fail:
+        msg: >-
+          Unable to read the current Tailscale operator. No permission was
+          changed. Verify `sudo tailscale get operator` before retrying.
+      when:
+        - tailscale_operator_current is defined
+        - not (tailscale_operator_current.skipped | default(false))
+        - (tailscale_operator_current.rc | default(1)) != 0
+
+    - name: Refuse to replace an existing Tailscale operator
+      ansible.builtin.fail:
+        msg: >-
+          Tailscale already delegates operator access to
+          '{{ tailscale_operator_current.stdout | trim }}'. No permission was
+          changed. Remove that delegation explicitly before granting it to
+          '{{ openclaw_user }}'.
+      when:
+        - openclaw_vpn_provider == 'tailscale'
+        - tailscale_operator_enabled | bool
+        - tailscale_operator_current is defined
+        - not (tailscale_operator_current.skipped | default(false))
+        - (tailscale_operator_current.rc | default(1)) == 0
+        - tailscale_operator_current.stdout | default('') | trim | length > 0
+        - tailscale_operator_current.stdout | default('') | trim != openclaw_user
+
+    - name: Grant the openclaw user Tailscale operator access
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - "--operator={{ openclaw_user }}"
+      changed_when: true
+      when:
+        - openclaw_vpn_provider == 'tailscale'
+        - tailscale_operator_enabled | bool
+        - tailscale_operator_current is defined
+        - not (tailscale_operator_current.skipped | default(false))
+        - (tailscale_operator_current.rc | default(1)) == 0
+        - tailscale_operator_current.stdout | default('') | trim | length == 0
+
+    - name: Revoke the openclaw user Tailscale operator access
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - --operator=
+      changed_when: true
+      when:
+        - openclaw_vpn_provider | length > 0
+        - >-
+          openclaw_vpn_provider != 'tailscale'
+          or not (tailscale_operator_enabled | bool)
+        - tailscale_operator_current is defined
+        - not (tailscale_operator_current.skipped | default(false))
+        - (tailscale_operator_current.rc | default(1)) == 0
+        - tailscale_operator_current.stdout | default('') | trim == openclaw_user
+  always:
+    - name: Restore the previous stopped Tailscale service state
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: stopped
+      when:
+        - tailscale_operator_service_present | bool
+        - not (tailscale_operator_service_was_running | bool)
+        - tailscale_operator_service_start is defined
+        - not (tailscale_operator_service_start.skipped | default(false))

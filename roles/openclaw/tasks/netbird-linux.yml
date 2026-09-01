@@ -1,0 +1,349 @@
+---
+# NetBird client installation for Debian and Ubuntu.
+
+- name: Build the manual NetBird connection command
+  ansible.builtin.set_fact:
+    openclaw_vpn_connect_command: >-
+      sudo netbird up{{ ' --management-url=' ~ (netbird_management_url | quote)
+      if netbird_management_url | length > 0 else '' }}
+
+- name: Check for NetBird active-profile metadata
+  ansible.builtin.stat:
+    path: /var/lib/netbird/active_profile.json
+  register: netbird_active_profile_metadata
+  check_mode: false
+
+- name: Read NetBird active-profile metadata
+  ansible.builtin.slurp:
+    src: /var/lib/netbird/active_profile.json
+  register: netbird_active_profile_file
+  check_mode: false
+  when: netbird_active_profile_metadata.stat.exists
+
+- name: Resolve the active NetBird profile identity
+  ansible.builtin.set_fact:
+    netbird_active_profile: >-
+      {{ (netbird_active_profile_file.content | b64decode | from_json)
+         if netbird_active_profile_metadata.stat.exists
+         else {'name': 'default', 'username': ''} }}
+
+- name: Validate the persisted NetBird profile identity
+  ansible.builtin.assert:
+    that:
+      - >-
+        netbird_active_profile.get('name', 'default')
+        is match('^[A-Za-z0-9_-]+$')
+      - >-
+        netbird_active_profile.get('username', '')
+        is match('^[A-Za-z0-9_-]*$')
+    fail_msg: >-
+      NetBird active-profile metadata is invalid. Refusing to construct a
+      privileged profile path; inspect /var/lib/netbird/active_profile.json.
+
+- name: Resolve the persisted NetBird profile path
+  ansible.builtin.set_fact:
+    netbird_active_profile_path: >-
+      {{ '/var/lib/netbird/default.json'
+         if netbird_active_profile.get('name', 'default') == 'default'
+         else '/var/lib/netbird/'
+              ~ netbird_active_profile.get('username', '') ~ '/'
+              ~ netbird_active_profile.get('name') ~ '.json' }}
+
+- name: Check for current and legacy NetBird profiles
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ netbird_active_profile_path }}"
+    - /etc/netbird/config.json
+  register: netbird_profile_candidates
+  check_mode: false
+
+- name: Record the persisted NetBird profile path
+  ansible.builtin.set_fact:
+    netbird_persisted_profile_path: >-
+      {{ netbird_active_profile_path
+         if netbird_profile_candidates.results[0].stat.exists
+         else ('/etc/netbird/config.json'
+               if netbird_profile_candidates.results[1].stat.exists else '') }}
+    netbird_profile_preexisting: >-
+      {{ netbird_profile_candidates.results
+         | map(attribute='stat.exists') | max }}
+
+- name: Determine whether persisted endpoint validation is required
+  ansible.builtin.set_fact:
+    netbird_persisted_endpoint_validation_required: >-
+      {{ netbird_profile_preexisting | bool }}
+
+- name: Read the persisted NetBird profile before any service activity
+  ansible.builtin.slurp:
+    src: "{{ netbird_persisted_profile_path }}"
+  register: netbird_persisted_profile
+  check_mode: false
+  no_log: true
+  when: netbird_persisted_endpoint_validation_required | bool
+
+- name: Parse the persisted NetBird management endpoint fields
+  ansible.builtin.set_fact:
+    netbird_persisted_management_parts: >-
+      {{ ((netbird_persisted_profile.content | b64decode | from_json)
+          ['ManagementURL']) | default({}) }}
+  no_log: true
+  when: netbird_persisted_endpoint_validation_required | bool
+
+- name: Read the persisted NetBird management endpoint
+  ansible.builtin.set_fact:
+    netbird_effective_management_url: >-
+      {{ netbird_persisted_management_parts
+         if netbird_persisted_management_parts is string
+         else netbird_persisted_management_parts.get('Scheme', '') ~ '://'
+              ~ netbird_persisted_management_parts.get('Host', '')
+              ~ netbird_persisted_management_parts.get('Path', '') }}
+  no_log: true
+  when: netbird_persisted_endpoint_validation_required | bool
+
+- name: Fail safely when the persisted NetBird endpoint is unavailable
+  ansible.builtin.fail:
+    msg: >-
+      NetBird has an existing profile, but its persisted management endpoint
+      could not be read. No service state was changed and no control-plane
+      migration was attempted. Inspect '{{ netbird_persisted_profile_path }}'
+      and rerun the playbook.
+  when:
+    - netbird_persisted_endpoint_validation_required | bool
+    - netbird_effective_management_url | default('') | length == 0
+
+- name: Validate the persisted endpoint before any service activity
+  ansible.builtin.include_tasks: netbird-endpoint-compare-linux.yml
+  when: netbird_persisted_endpoint_validation_required | bool
+
+- name: Check whether NetBird is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/netbird
+  register: netbird_executable
+  check_mode: false
+
+- name: Install NetBird repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+
+- name: Validate the installed NetBird GPG key fingerprint
+  ansible.builtin.shell:
+    cmd: |
+      set -o errexit -o nounset -o pipefail
+      netbird_key_fingerprints="$(
+        gpg --batch --with-colons --show-keys \
+          /usr/share/keyrings/netbird-archive-keyring.gpg 2>/dev/null | \
+          awk -F: '
+            $1 == "pub" { need_primary_fingerprint = 1; next }
+            need_primary_fingerprint && $1 == "fpr" {
+              print $10
+              need_primary_fingerprint = 0
+            }
+          '
+      )"
+      test "$netbird_key_fingerprints" = \
+        "$NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT"
+    executable: /bin/bash
+  register: netbird_signing_key
+  environment:
+    NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT: >-
+      {{ netbird_repository_signing_key_fingerprint }}
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Install the NetBird GPG key atomically
+  ansible.builtin.shell:
+    cmd: |
+      set -o errexit -o nounset -o pipefail
+      netbird_public_key_tmp="$(mktemp)"
+      netbird_keyring_tmp="$(
+        mktemp /usr/share/keyrings/.netbird-archive-keyring.gpg.XXXXXX
+      )"
+      trap 'rm -f "$netbird_public_key_tmp" "$netbird_keyring_tmp"' EXIT
+      curl -fsSL "$NETBIRD_SIGNING_KEY_URL" > "$netbird_public_key_tmp"
+      netbird_downloaded_fingerprints="$(
+        gpg --batch --with-colons --show-keys \
+          "$netbird_public_key_tmp" 2>/dev/null | \
+          awk -F: '
+            $1 == "pub" { need_primary_fingerprint = 1; next }
+            need_primary_fingerprint && $1 == "fpr" {
+              print $10
+              need_primary_fingerprint = 0
+            }
+          '
+      )"
+      if test "$netbird_downloaded_fingerprints" != \
+          "$NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT"; then
+        echo "Downloaded NetBird signing key fingerprint mismatch" >&2
+        exit 1
+      fi
+      gpg --batch --yes --dearmor \
+        --output "$netbird_keyring_tmp" "$netbird_public_key_tmp"
+      chmod 0644 "$netbird_keyring_tmp"
+      mv -- "$netbird_keyring_tmp" \
+        /usr/share/keyrings/netbird-archive-keyring.gpg
+    executable: /bin/bash
+  environment:
+    NETBIRD_EXPECTED_SIGNING_KEY_FINGERPRINT: >-
+      {{ netbird_repository_signing_key_fingerprint }}
+    NETBIRD_SIGNING_KEY_URL: "{{ netbird_repository_key_url }}"
+  changed_when: true
+  when: (netbird_signing_key.rc | default(1)) != 0
+
+- name: Add NetBird apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/netbird.list
+    content: >-
+      deb [signed-by=/usr/share/keyrings/netbird-archive-keyring.gpg]
+      https://pkgs.netbird.io/debian stable main
+    owner: root
+    group: root
+    mode: '0644'
+  register: netbird_repository
+
+- name: Check whether the NetBird package source is available
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/share/keyrings/netbird-archive-keyring.gpg
+    - /etc/apt/sources.list.d/netbird.list
+  register: netbird_package_source
+  check_mode: false
+
+- name: Install NetBird
+  ansible.builtin.apt:
+    name: netbird
+    state: present
+    update_cache: "{{ not netbird_executable.stat.exists }}"
+  register: netbird_package_install
+  when: >-
+    netbird_executable.stat.exists
+    or (netbird_package_source.results
+        | map(attribute='stat.exists') | min)
+
+- name: Refresh NetBird executable availability after package handling
+  ansible.builtin.stat:
+    path: /usr/bin/netbird
+  register: netbird_executable_after_install
+  check_mode: false
+
+- name: Enable and start NetBird
+  ansible.builtin.systemd:
+    name: netbird
+    enabled: true
+    state: started
+  register: netbird_service
+  when: netbird_executable_after_install.stat.exists
+
+- name: Check whether NetBird is connected and ready
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - '15'
+      - netbird
+      - status
+      - --check
+      - startup
+  register: netbird_authenticated
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Join NetBird with a setup key
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'timeout',
+          netbird_connect_timeout | string,
+          'netbird',
+          'up',
+          '--setup-key=' ~ netbird_setup_key
+        ]
+        + (['--management-url=' ~ netbird_management_url]
+           if netbird_management_url | length > 0 else [])
+      }}
+  register: netbird_join
+  changed_when: netbird_join.rc == 0
+  failed_when: false
+  no_log: true
+  when:
+    - (netbird_authenticated.rc | default(1)) != 0
+    - netbird_setup_key | length > 0
+
+- name: Fail clearly when the NetBird setup-key join fails
+  ansible.builtin.fail:
+    msg: >-
+      NetBird could not connect within {{ netbird_connect_timeout }} seconds.
+      Check the management URL, network reachability, and setup-key validity,
+      then rerun the playbook or connect manually with
+      `{{ openclaw_vpn_connect_command }}`.
+  when:
+    - netbird_join is defined
+    - not (netbird_join.skipped | default(false))
+    - (netbird_join.rc | default(1)) != 0
+
+- name: Verify NetBird readiness after setup-key join
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - '15'
+      - netbird
+      - status
+      - --check
+      - startup
+  register: netbird_ready_after_join
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  when:
+    - netbird_join is defined
+    - not (netbird_join.skipped | default(false))
+    - (netbird_join.rc | default(1)) == 0
+
+- name: Fail when NetBird does not become ready after joining
+  ansible.builtin.fail:
+    msg: >-
+      NetBird accepted the join command but did not become ready. Inspect
+      `sudo netbird status` and the netbird service before retrying.
+  when:
+    - netbird_ready_after_join is defined
+    - not (netbird_ready_after_join.skipped | default(false))
+    - (netbird_ready_after_join.rc | default(1)) != 0
+
+- name: Display manual NetBird connection guidance
+  ansible.builtin.debug:
+    msg: >-
+      NetBird is installed but not connected. Run
+      `{{ openclaw_vpn_connect_command }}`, or provide netbird_setup_key for
+      unattended registration.
+  register: netbird_manual_guidance
+  when:
+    - (netbird_authenticated.rc | default(1)) != 0
+    - netbird_setup_key | length == 0
+
+- name: Discard the newly generated unenrolled NetBird profile
+  ansible.builtin.file:
+    path: "{{ netbird_active_profile_path }}"
+    state: absent
+  when:
+    - not (netbird_profile_preexisting | bool)
+    - (netbird_authenticated.rc | default(1)) != 0
+    - netbird_setup_key | length == 0
+
+- name: Record whether selected NetBird is ready
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: >-
+      {{ (netbird_authenticated.rc | default(1)) == 0
+         or (netbird_ready_after_join is defined
+             and not (netbird_ready_after_join.skipped | default(false))
+             and (netbird_ready_after_join.rc | default(1)) == 0) }}
+
+- name: Reject management endpoint drift on a ready NetBird client
+  ansible.builtin.include_tasks: netbird-endpoint-linux.yml
+  when: openclaw_selected_vpn_ready | bool

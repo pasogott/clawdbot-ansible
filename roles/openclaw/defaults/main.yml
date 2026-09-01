@@ -8,6 +8,26 @@ ci_test: false
 # WARNING: Tasks using tailscale_authkey MUST set no_log: true to prevent credential exposure
 tailscale_enabled: false  # Set to true to install and configure Tailscale
 tailscale_authkey: ""  # Optional: set to auto-connect during installation
+tailscale_authkey_timeout: "60s"  # Bound unattended joins; Tailscale otherwise waits forever
+tailscale_ssh: false  # Opt in to Tailscale SSH when joining with an auth key
+tailscale_operator_enabled: false  # Opt in to let openclaw manage Tailscale and Serve
+# Existing installs must explicitly acknowledge removal of the old wildcard
+# passwordless `tailscale up` and `tailscale down` recovery commands.
+tailscale_legacy_sudo_migration_acknowledged: false
+
+# VPN provider selection. Leave empty to preserve the legacy tailscale_enabled
+# behavior, or select exactly one supported provider.
+vpn_provider: ""  # "tailscale", "netbird", or ""
+
+# NetBird settings
+# WARNING: Tasks using netbird_setup_key MUST set no_log: true
+netbird_setup_key: ""  # Optional: auto-connect during installation
+netbird_management_url: ""  # Empty selects NetBird Cloud; otherwise self-hosted URL
+netbird_connect_timeout: 60  # Seconds before an unattended join is stopped
+# NetBird's published Debian repository key. Keep the fingerprint pinned so a
+# valid but substituted OpenPGP key cannot become an APT trust root.
+netbird_repository_key_url: https://pkgs.netbird.io/debian/public.key
+netbird_repository_signing_key_fingerprint: EFE37DF047DF7CCDF1FC54FA83F79AD029778355
 
 # Node.js version
 nodejs_version: "22.x"

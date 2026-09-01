@@ -1,6 +1,16 @@
 ---
 # Linux-specific Tailscale installation (Debian/Ubuntu)
 
+- name: Build the manual Tailscale connection command
+  ansible.builtin.set_fact:
+    openclaw_vpn_connect_command: sudo tailscale up
+
+- name: Check whether Tailscale is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/tailscale
+  register: tailscale_executable
+  check_mode: false
+
 - name: Add Tailscale GPG key
   ansible.builtin.shell:
     cmd: |
@@ -22,6 +32,16 @@
         tee /etc/apt/sources.list.d/tailscale.list > /dev/null
     creates: /etc/apt/sources.list.d/tailscale.list
     executable: /bin/bash
+  register: tailscale_repository
+
+- name: Check whether the Tailscale package source is available
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/share/keyrings/tailscale-archive-keyring.gpg
+    - /etc/apt/sources.list.d/tailscale.list
+  register: tailscale_package_source
+  check_mode: false
 
 - name: Update apt cache after adding Tailscale repo
   ansible.builtin.apt:
@@ -31,20 +51,136 @@
   ansible.builtin.apt:
     name: tailscale
     state: present
+  register: tailscale_package_install
+  when: >-
+    tailscale_executable.stat.exists
+    or (tailscale_package_source.results
+        | map(attribute='stat.exists') | min)
+
+- name: Refresh Tailscale executable availability after package handling
+  ansible.builtin.stat:
+    path: /usr/bin/tailscale
+  register: tailscale_executable_after_install
+  check_mode: false
 
 - name: Enable Tailscale service (Linux)
   ansible.builtin.systemd:
     name: tailscaled
     enabled: true
     state: started
+  register: tailscale_service
+  when: tailscale_executable_after_install.stat.exists
 
 - name: Check if Tailscale is already connected (Linux)
   ansible.builtin.command: tailscale status --json
   register: tailscale_status_linux
+  check_mode: false
   changed_when: false
   failed_when: false
 
-- name: Display Tailscale auth URL if not connected (Linux)
+- name: Default Tailscale backend state when status is unavailable
+  ansible.builtin.set_fact:
+    tailscale_backend_state: "Unknown"
+    tailscale_self_online: false
+    tailscale_health_issues:
+      - Tailscale status is unavailable
+
+# `tailscale status --json` exits 0 whenever tailscaled is reachable, including
+# NeedsLogin and Stopped. Parse BackendState instead of treating rc=0 as joined.
+- name: Parse Tailscale backend state
+  when:
+    - (tailscale_status_linux.rc | default(1)) == 0
+    - tailscale_status_linux.stdout | default('') | trim | length > 0
+  block:
+    - name: Read BackendState from Tailscale status JSON
+      ansible.builtin.set_fact:
+        tailscale_backend_state: >-
+          {{ (tailscale_status_linux.stdout | from_json).BackendState
+             | default('Unknown') }}
+        tailscale_self_online: >-
+          {{ (tailscale_status_linux.stdout | from_json)
+             .get('Self', {}).get('Online', false) | bool }}
+        tailscale_health_issues: >-
+          {{ (tailscale_status_linux.stdout | from_json).Health
+             | default([], true) }}
+  rescue:
+    - name: Report unreadable Tailscale status
+      ansible.builtin.debug:
+        msg: >-
+          Tailscale returned unreadable status JSON. Automatic login is being
+          skipped; inspect `sudo tailscale status` before retrying.
+
+# Only authenticate a fresh NeedsLogin node. A Stopped node is already
+# authorized and can carry operator-managed preferences; this role must not
+# reset or silently replace those preferences during a routine rerun.
+- name: Join Tailnet with auth key (Linux)
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          'tailscale',
+          'up',
+          '--auth-key=' ~ tailscale_authkey,
+          '--timeout=' ~ tailscale_authkey_timeout
+        ]
+        + (['--ssh'] if tailscale_ssh | bool else [])
+      }}
+  register: tailscale_join
+  changed_when: tailscale_join.rc == 0
+  failed_when: false
+  no_log: true
+  when:
+    - tailscale_backend_state == 'NeedsLogin'
+    - tailscale_authkey | default('') | length > 0
+
+- name: Fail clearly when Tailscale auth-key join fails
+  ansible.builtin.fail:
+    msg: >-
+      Tailscale could not join the tailnet within {{ tailscale_authkey_timeout }}.
+      Check control-plane reachability and auth-key validity, then rerun the
+      playbook or connect manually with `sudo tailscale up`.
+  when:
+    - tailscale_join is defined
+    - not (tailscale_join.skipped | default(false))
+    - (tailscale_join.rc | default(1)) != 0
+
+- name: Refresh Tailscale status after auth-key join
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status_after_join
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  when:
+    - tailscale_join is defined
+    - not (tailscale_join.skipped | default(false))
+    - (tailscale_join.rc | default(1)) == 0
+
+- name: Parse Tailscale backend state after auth-key join
+  when:
+    - tailscale_status_after_join is defined
+    - not (tailscale_status_after_join.skipped | default(false))
+    - (tailscale_status_after_join.rc | default(1)) == 0
+    - tailscale_status_after_join.stdout | default('') | trim | length > 0
+  block:
+    - name: Read refreshed BackendState from Tailscale status JSON
+      ansible.builtin.set_fact:
+        tailscale_backend_state: >-
+          {{ (tailscale_status_after_join.stdout | from_json).BackendState
+             | default('Unknown') }}
+        tailscale_self_online: >-
+          {{ (tailscale_status_after_join.stdout | from_json)
+             .get('Self', {}).get('Online', false) | bool }}
+        tailscale_health_issues: >-
+          {{ (tailscale_status_after_join.stdout | from_json).Health
+             | default([], true) }}
+  rescue:
+    - name: Report unreadable refreshed Tailscale status
+      ansible.builtin.debug:
+        msg: >-
+          Tailscale joined but returned unreadable status JSON. The previous
+          VPN will be retained until a later run confirms Tailscale is ready.
+
+- name: Display Tailscale auth URL when login is required (Linux)
   ansible.builtin.debug:
     msg:
       - "============================================"
@@ -58,4 +194,39 @@
       - "sudo tailscale up --authkey tskey-auth-xxxxx"
       - ""
       - "Get auth key from: https://login.tailscale.com/admin/settings/keys"
-  when: tailscale_status_linux.rc != 0
+  when:
+    - tailscale_backend_state == 'NeedsLogin'
+    - tailscale_authkey | default('') | length == 0
+
+- name: Display guidance for a stopped Tailscale node (Linux)
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale is authorized but stopped. Existing Tailscale preferences were
+      preserved. Reconnect deliberately with `sudo tailscale up`.
+  when: tailscale_backend_state == 'Stopped'
+
+- name: Display guidance when Tailscale status is unavailable (Linux)
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale status is unavailable, so automatic login was skipped. Run
+      `sudo tailscale status` and inspect the tailscaled service before retrying.
+  when: tailscale_backend_state == 'Unknown'
+
+- name: Display guidance when Tailscale is running but unhealthy
+  ansible.builtin.debug:
+    msg: >-
+      Tailscale is running but the local peer is offline or reports health
+      problems. The previous VPN will be retained until `sudo tailscale
+      status` confirms this peer is online and healthy.
+  when:
+    - tailscale_backend_state == 'Running'
+    - >-
+      not (tailscale_self_online | bool)
+      or tailscale_health_issues | length > 0
+
+- name: Record whether selected Tailscale is ready
+  ansible.builtin.set_fact:
+    openclaw_selected_vpn_ready: >-
+      {{ tailscale_backend_state == 'Running'
+         and tailscale_self_online | bool
+         and tailscale_health_issues | length == 0 }}

@@ -38,6 +38,25 @@ The `ci_test` variable skips tasks that require:
 
 Everything else runs normally: package installation, user creation, Node.js/pnpm setup, OpenClaw installation from npm, directory structure, config file rendering, etc. The harness requires internet access.
 
+## Hosted VPN Tests
+
+The GitHub Actions workflow also runs two destructive integration playbooks on
+fresh `ubuntu-24.04` hosted runners. Do not run these on a persistent host:
+
+- `vpn-provider-transition.yml` installs both real VPN clients, exercises both
+  provider-switch directions, verifies service and UFW convergence, preserves
+  unconfigured existing providers, renders self-hosted manual guidance, rejects
+  ready and stopped-client management endpoint drift (including self-hosted to
+  Cloud), exercises fresh-install and credential paths in check mode, and
+  repeats reconciliation for idempotency.
+- `tailscale-operator-boundary.yml` uses a real Tailscale daemon and the
+  production sudoers template to prove grant, revocation, preservation of a
+  different operator, stopped-daemon reconciliation, explicit migration from
+  legacy wildcard sudo access, rejection of a sudo-based authority restore,
+  and revocation before a replacement provider fails validation.
+
+Neither test enrolls the runner in a private network or requires credentials.
+
 ## What Gets Tested
 
 | Component | Tested? | Notes |
@@ -49,9 +68,10 @@ Everything else runs normally: package installation, user creation, Node.js/pnpm
 | Git global config | ✅ Yes | Aliases, default branch |
 | Vim config | ✅ Yes | Template rendering |
 | Docker CE install | ❌ No | Needs Docker-in-Docker |
-| UFW / iptables | ❌ No | Needs kernel access |
+| UFW / iptables | ⚠️ Partial | Hosted VPN tests verify the Tailscale rule; Docker-chain tests still need kernel access |
 | fail2ban / systemd | ❌ No | Needs running systemd |
-| Tailscale | ❌ No | Disabled by default already |
+| Tailscale | ✅ Hosted | Real package, daemon, provider transitions, fresh/auth-key check mode, and operator boundary |
+| NetBird | ✅ Hosted | Real package, daemon, provider transitions, check mode, endpoint-drift refusal, keyring repair, and rejection of a valid unapproved signing key |
 | OpenClaw app install | ✅ Yes | Latest npm release and version check |
 | Idempotency | ✅ Yes | Second run must have 0 changes |
 
@@ -70,9 +90,11 @@ The pinned lint tools in `requirements-lint.txt` require Python 3.12 or newer; C
 python -m pip install -r requirements-lint.txt
 ansible-galaxy collection install -r requirements.yml
 yamllint .
-ansible-lint playbook.yml tests/docker-group-security.yml
+ansible-lint playbook.yml tests/*.yml
 ansible-playbook playbook.yml --syntax-check
 ansible-playbook tests/docker-group-security.yml --syntax-check
+ansible-playbook tests/vpn-provider-transition.yml --syntax-check
+ansible-playbook tests/tailscale-operator-boundary.yml --syntax-check
 ```
 
 ### Additional Distributions

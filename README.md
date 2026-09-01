@@ -7,7 +7,7 @@
 [![Ansible](https://img.shields.io/badge/Ansible-2.14+-blue.svg)](https://www.ansible.com/)
 [![Multi-OS](https://img.shields.io/badge/OS-Debian%20%7C%20Ubuntu-orange.svg)](https://www.debian.org/)
 
-Automated, hardened installation of [OpenClaw](https://github.com/openclaw/openclaw) with Docker and Tailscale VPN support for Debian/Ubuntu Linux.
+Automated, hardened installation of [OpenClaw](https://github.com/openclaw/openclaw) with Docker and optional Tailscale or NetBird mesh VPN support for Debian/Ubuntu Linux.
 
 ## ⚠️ macOS Support: Deprecated & Disabled
 
@@ -26,7 +26,7 @@ The underlying project currently requires system-level permissions and configura
 - 🔒 **Firewall-first**: UFW firewall + Docker isolation
 - 🛡️ **Fail2ban**: SSH brute-force protection out of the box
 - 🔄 **Auto-updates**: Automatic security patches via unattended-upgrades
-- 🔐 **Tailscale VPN**: Secure remote access without exposing services
+- 🔐 **Mesh VPN**: Optional Tailscale or NetBird remote access without exposing services
 - 🐳 **Docker**: Docker CE with security hardening
 - 🚀 **One-command install**: Complete setup in minutes
 - 🔧 **Auto-configuration**: DBus, systemd, environment setup
@@ -57,8 +57,8 @@ cd openclaw-ansible
 
 ## What Gets Installed
 
-- Tailscale (mesh VPN)
-- UFW firewall (SSH + Tailscale ports only)
+- Optional Tailscale or NetBird mesh VPN
+- UFW firewall (SSH plus Tailscale UDP when selected)
 - Docker CE + Compose V2 (for sandboxes)
 - Node.js 22.x + pnpm
 - OpenClaw on host (not containerized)
@@ -245,7 +245,8 @@ Enable with: `-e openclaw_install_mode=development`
 
 ## Security
 
-- **Public ports**: SSH (22), Tailscale (41641/udp) only
+- **Public ports**: SSH (22), plus Tailscale UDP only when selected; NetBird
+  requires no inbound firewall port
 - **Fail2ban**: SSH brute-force protection (5 attempts → 1 hour ban)
 - **Automatic updates**: Security patches via unattended-upgrades
 - **Docker isolation**: Containers can't expose ports externally (DOCKER-USER chain)
@@ -308,6 +309,7 @@ openclaw_ssh_keys:
   - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host"
 openclaw_repo_url: "https://github.com/YOUR_USERNAME/openclaw.git"
 openclaw_repo_branch: "feature-branch"
+vpn_provider: "tailscale"
 tailscale_authkey: "tskey-auth-xxxxxxxxxxxxx"
 EOF
 
@@ -329,7 +331,14 @@ Edit `roles/openclaw/defaults/main.yml` before running the playbook.
 | `openclaw_ssh_keys` | `[]` | List of SSH public keys |
 | `openclaw_repo_url` | `https://github.com/openclaw/openclaw.git` | Git repository (dev mode) |
 | `openclaw_repo_branch` | `main` | Git branch (dev mode) |
+| `vpn_provider` | `""` | Optional `tailscale` or `netbird`; empty preserves existing VPN state |
+| `tailscale_enabled` | `false` | Legacy switch for Tailscale |
 | `tailscale_authkey` | `""` | Tailscale auth key for auto-connect |
+| `tailscale_ssh` | `false` | Enable Tailscale SSH when joining with an auth key |
+| `tailscale_operator_enabled` | `false` | Let the openclaw user manage Tailscale and Serve; opt-out revokes its grant |
+| `tailscale_legacy_sudo_migration_acknowledged` | `false` | Confirm migration from existing passwordless Tailscale recovery commands to strict operator-based control |
+| `netbird_setup_key` | `""` | NetBird setup key for auto-connect |
+| `netbird_management_url` | `""` | NetBird Cloud when empty, or a self-hosted management URL |
 | `nodejs_version` | `22.x` | Node.js version to install |
 
 See [`roles/openclaw/defaults/main.yml`](roles/openclaw/defaults/main.yml) for the complete list.
@@ -356,8 +365,37 @@ ansible-playbook playbook.yml --ask-become-pass \
 
 ```bash
 ansible-playbook playbook.yml --ask-become-pass \
+  -e vpn_provider=tailscale \
   -e tailscale_authkey=tskey-auth-xxxxxxxxxxxxx
 ```
+
+Existing inventories using `tailscale_enabled=true` remain supported.
+
+Upgrades from releases that generated passwordless `tailscale up *` and
+`tailscale down` rules stop before changing the existing sudoers policy. First
+verify independent administrator or root access, then acknowledge migration to
+the strict policy:
+
+```bash
+ansible-playbook playbook.yml --ask-become-pass \
+  -e tailscale_legacy_sudo_migration_acknowledged=true
+```
+
+If the OpenClaw account still needs daemon control, also select Tailscale and
+set `tailscale_operator_enabled=true` to use scoped operator delegation instead
+of wildcard passwordless sudo.
+
+#### NetBird Auto-Connect
+
+```bash
+ansible-playbook playbook.yml --ask-become-pass \
+  -e vpn_provider=netbird \
+  -e netbird_setup_key=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+The NetBird Debian repository key is accepted only when its primary fingerprint
+matches the value pinned by this role. A valid but substituted OpenPGP key is
+rejected before it can replace the installed APT trust root.
 
 ## License
 

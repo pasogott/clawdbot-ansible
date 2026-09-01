@@ -1,0 +1,20 @@
+---
+# Revoke obsolete OpenClaw-owned authority before replacement provisioning.
+# A fallible provider install must not be able to bypass that security boundary.
+
+- name: Revoke obsolete Tailscale operator access before provisioning
+  ansible.builtin.include_tasks: tailscale-operator-linux.yml
+  when:
+    - not ci_test
+    - openclaw_vpn_provider | length > 0
+    - >-
+      openclaw_vpn_provider != 'tailscale'
+      or not (tailscale_operator_enabled | bool)
+
+- name: Include Tailscale installation tasks
+  ansible.builtin.include_tasks: tailscale-linux.yml
+  when: openclaw_vpn_provider == 'tailscale'
+
+- name: Include NetBird installation tasks
+  ansible.builtin.include_tasks: netbird-linux.yml
+  when: openclaw_vpn_provider == 'netbird'
