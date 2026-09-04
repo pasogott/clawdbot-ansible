@@ -1,6 +1,32 @@
 ---
 # Release mode installation - Install via pnpm from npm registry
 
+# Validate before the value is interpolated into the install shell command.
+# Only two shapes are accepted, both free of shell metacharacters so the install
+# command boundary stays safe:
+#   - a dist-tag: lowercase letters and hyphens, and not the wildcard "x"
+#     (e.g. "latest", "next", "beta", "canary")
+#   - an exact version: full X.Y.Z with an optional prerelease (e.g. "1.2.3",
+#     "1.2.3-beta.1")
+# Everything semver treats as a moving range is rejected: partial versions
+# ("1", "1.2"), wildcards ("x", "X", "1.x"), v-prefixed versions ("v1", "v1.2"),
+# and operator ranges ("^1.2.3", ">=1.0"). A pin must never resolve to a moving
+# version, and a real npm dist-tag is never a valid semver range.
+- name: Validate openclaw_version is a safe npm dist-tag or exact version
+  ansible.builtin.assert:
+    that:
+      - openclaw_version is string
+      - >-
+        (openclaw_version is match('^[a-z][a-z-]*$') and openclaw_version != 'x')
+        or openclaw_version is match('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$')
+    fail_msg: >-
+      Invalid openclaw_version '{{ openclaw_version }}'. Use an npm dist-tag
+      (lowercase, e.g. 'latest') or a full exact version (e.g. '1.2.3'). Values
+      semver treats as ranges -- partial ('1', '1.2'), wildcard ('x', '1.x'),
+      v-prefixed ('v1') or operator ('^1.2.3', '>=1.0') -- are not supported in
+      release mode, because pnpm would resolve them to a moving version.
+    quiet: true
+
 - name: Check existing OpenClaw release installation
   ansible.builtin.shell:
     cmd: openclaw --version
@@ -25,9 +51,39 @@
   changed_when: false
   failed_when: false
 
+# Resolve the real path of the current openclaw binary so the skip guard below
+# can confirm it is the pnpm-installed package and not, for example, a symlink
+# left by development mode (openclaw-development.yml symlinks the binary into
+# ~/.local/bin, which precedes the pnpm bin on PATH). Without this, switching a
+# host from development to release mode with a matching version string could
+# skip the install and keep running a mutable checkout.
+- name: Resolve the existing openclaw binary path (release provenance check)
+  ansible.builtin.shell:
+    cmd: readlink -f "$(command -v openclaw)"
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  environment:
+    PNPM_HOME: "{{ openclaw_home }}/.local/share/pnpm"
+    PATH: >-
+      {{
+        [
+          openclaw_home ~ '/.local/bin',
+          openclaw_home ~ '/.local/share/pnpm/bin',
+          openclaw_home ~ '/.local/share/pnpm',
+          '/usr/local/bin',
+          '/usr/bin',
+          '/bin'
+        ] | join(':')
+      }}
+    HOME: "{{ openclaw_home }}"
+  register: openclaw_existing_path
+  changed_when: false
+  failed_when: false
+
 - name: Install OpenClaw globally as openclaw user (using pnpm)
   ansible.builtin.shell:
-    cmd: pnpm install -g openclaw@latest
+    cmd: "pnpm install -g 'openclaw@{{ openclaw_version }}'"
     executable: /bin/bash
   become: true
   become_user: "{{ openclaw_user }}"
@@ -47,6 +103,59 @@
     HOME: "{{ openclaw_home }}"
   register: openclaw_install
   changed_when: false
+  # Skip the pnpm install when the requested version is already present AND the
+  # current binary is the pnpm-installed package.
+  # A dist-tag (e.g. "latest") is always (re)installed because the version it
+  # resolves to can move upstream. An exact version pin is installed only once
+  # and skipped on later runs, making release deploys idempotent. The installed
+  # version is compared in full (including any prerelease suffix), so a build
+  # like "1.2.3-beta.1" is never treated as satisfying a "1.2.3" pin. The
+  # provenance check forces a real install when the existing binary is not under
+  # the pnpm store (e.g. a development-mode symlink), so the role never reports a
+  # pinned release while a mutable checkout is actually on PATH.
+  when: >-
+    openclaw_existing.rc != 0
+    or openclaw_version is not match('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$')
+    or (openclaw_existing.stdout | default('')
+    | regex_search('[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?')) != openclaw_version
+    or not (openclaw_existing_path.stdout | default(''))
+    is search('^' ~ (openclaw_home | regex_escape) ~ '/\.local/share/pnpm/')
+
+# Re-resolve ~/.local/bin/openclaw AFTER the install. The decision to remove a
+# stale shadow must be made on the post-install target, never the pre-install
+# one: this role configures pnpm's global-bin-dir to ~/.local/bin, so a release
+# install can legitimately (re)create ~/.local/bin/openclaw pointing into the
+# pnpm store. Removing it based on the pre-install state could delete the binary
+# that was just installed.
+- name: Re-resolve ~/.local/bin/openclaw after install (shadow check)
+  ansible.builtin.shell:
+    cmd: >-
+      if [ -e "{{ openclaw_home }}/.local/bin/openclaw" ]; then
+      readlink -f "{{ openclaw_home }}/.local/bin/openclaw"; fi
+    executable: /bin/bash
+  become: true
+  become_user: "{{ openclaw_user }}"
+  register: openclaw_local_bin_after
+  changed_when: false
+  failed_when: false
+
+# Make the pnpm-installed binary authoritative: drop ~/.local/bin/openclaw only
+# when it STILL resolves outside the pnpm store after the install (e.g. a stale
+# development-mode symlink to a checkout that pnpm did not overwrite). ~/.local/bin
+# precedes the pnpm bin on PATH, so such a shadow would otherwise mask the pinned
+# release. If pnpm placed its own bin there, it resolves into the store and is
+# kept; on a release-only host the file is absent and this is a no-op.
+- name: Remove stale non-pnpm openclaw shadow from ~/.local/bin
+  ansible.builtin.file:
+    path: "{{ openclaw_home }}/.local/bin/openclaw"
+    state: absent
+  become: true
+  become_user: "{{ openclaw_user }}"
+  when:
+    - openclaw_local_bin_after.stdout | default('') | length > 0
+    - >-
+      not (openclaw_local_bin_after.stdout
+      is search('^' ~ (openclaw_home | regex_escape) ~ '/\.local/share/pnpm/'))
 
 - name: Verify openclaw installation
   ansible.builtin.shell:
@@ -68,10 +177,10 @@
         ] | join(':')
       }}
     HOME: "{{ openclaw_home }}"
-  register: openclaw_version
+  register: openclaw_installed_version
   changed_when: >-
     openclaw_existing.rc != 0 or
-    openclaw_existing.stdout | default('') != openclaw_version.stdout
+    openclaw_existing.stdout | default('') != openclaw_installed_version.stdout
 
 - name: Ensure pnpm tree ownership after OpenClaw release install
   ansible.builtin.file:
@@ -83,8 +192,8 @@
   changed_when: false
   when: >-
     openclaw_existing.rc != 0 or
-    openclaw_existing.stdout | default('') != openclaw_version.stdout
+    openclaw_existing.stdout | default('') != openclaw_installed_version.stdout
 
 - name: Display installed OpenClaw version (release)
   ansible.builtin.debug:
-    msg: "OpenClaw installed from npm: {{ openclaw_version.stdout }}"
+    msg: "OpenClaw installed from npm: {{ openclaw_installed_version.stdout }}"

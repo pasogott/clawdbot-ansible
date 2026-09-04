@@ -89,11 +89,30 @@ Directly edit `roles/openclaw/defaults/main.yml` before running the playbook.
 - **Type**: String (`release` or `development`)
 - **Default**: `release`
 - **Description**: Installation mode
-  - `release`: Install via npm (`pnpm install -g openclaw@latest`)
+  - `release`: Install via npm (`pnpm install -g openclaw@<openclaw_version>`)
   - `development`: Clone repo, build from source, symlink binary
 - **Example**:
   ```bash
   -e openclaw_install_mode=development
+  ```
+
+#### `openclaw_version`
+- **Type**: String (npm dist-tag or exact version)
+- **Default**: `latest`
+- **Description**: OpenClaw release to install in `release` mode. Use `latest`
+  to always install the newest published release, or pin an exact version
+  (e.g. `1.2.3`) for reproducible deploys. When an exact version is pinned, the
+  install step is skipped on subsequent runs once that version is present.
+- **Note**: Only applies when `openclaw_install_mode: release`. The value must
+  be a lowercase dist-tag (e.g. `latest`) or a **full** exact version (e.g.
+  `1.2.3`). Anything semver treats as a moving range — partial (`1`, `1.2`),
+  wildcard (`x`, `1.x`), v-prefixed (`v1`), operator (`^1.2.3`, `>=1.0`) — plus
+  shell metacharacters, is rejected by a validation assert before the value
+  reaches the install command, since a range would resolve to a moving version
+  and defeat pinning.
+- **Example**:
+  ```bash
+  -e openclaw_version=1.2.3
   ```
 
 ### Development Mode Settings
@@ -230,6 +249,7 @@ ansible-playbook playbook.yml --ask-become-pass -e @vars-dev.yml
 ```yaml
 # vars-prod.yml
 openclaw_install_mode: release
+openclaw_version: "1.2.3"  # pin an exact version for reproducible deploys
 tailscale_authkey: "tskey-auth-k1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6"
 openclaw_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxxxxxxxx admin@mgmt-server"

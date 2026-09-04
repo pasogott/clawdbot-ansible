@@ -23,9 +23,20 @@ openclaw_user: openclaw
 openclaw_home: /home/openclaw
 
 # Installation mode: 'release' or 'development'
-# release: Install via pnpm install -g openclaw@latest
+# release: Install via pnpm install -g openclaw@<openclaw_version>
 # development: Clone repo, build from source, link globally
 openclaw_install_mode: "release"
+
+# OpenClaw version to install in release mode (only used when
+# openclaw_install_mode: release). Accepts an npm dist-tag or a full exact
+# version:
+#   "latest"  -> always (re)install the newest published release (default)
+#   "1.2.3"   -> pin an exact version for reproducible deploys; the install
+#                step is then skipped on subsequent runs once it is present.
+# Partial or range values (e.g. "1", "1.2", "1.x", "^1.2.3", ">=1.0") and shell
+# metacharacters are rejected by a validation assert before the value reaches
+# the install command, since pnpm would resolve a range to a moving version.
+openclaw_version: "latest"
 
 # Development mode settings (only used when openclaw_install_mode: development)
 openclaw_repo_url: "https://github.com/openclaw/openclaw.git"

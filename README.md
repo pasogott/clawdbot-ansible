@@ -226,9 +226,10 @@ Alternatively, to run the playbook from your existing project setup, run the pla
 ## Installation Modes
 
 ### Release Mode (Default)
-- Installs via `pnpm install -g openclaw@latest`
-- Gets latest stable version from npm registry
-- Automatic updates via `pnpm install -g openclaw@latest`
+- Installs via `pnpm install -g openclaw@<openclaw_version>`
+- Gets the latest stable version from npm registry by default
+- Pin an exact version for reproducible deploys: `-e openclaw_version=1.2.3`
+  (the install step is then skipped once that version is present)
 - **Recommended for production**
 
 ### Development Mode
@@ -326,6 +327,7 @@ Edit `roles/openclaw/defaults/main.yml` before running the playbook.
 | `openclaw_user` | `openclaw` | System user name |
 | `openclaw_home` | `/home/openclaw` | User home directory |
 | `openclaw_install_mode` | `release` | `release` or `development` |
+| `openclaw_version` | `latest` | npm version/tag to install (release mode) |
 | `openclaw_ssh_keys` | `[]` | List of SSH public keys |
 | `openclaw_repo_url` | `https://github.com/openclaw/openclaw.git` | Git repository (dev mode) |
 | `openclaw_repo_branch` | `main` | Git branch (dev mode) |
