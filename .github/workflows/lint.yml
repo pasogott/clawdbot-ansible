@@ -74,6 +74,16 @@ jobs:
           ansible-playbook playbook.yml --syntax-check
           ansible-playbook tests/docker-group-security.yml --syntax-check
 
+  install-ansible-version:
+    name: Installer Ansible Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Reject old ansible-playbook from install.sh
+        run: bash tests/install-ansible-version.sh
+
   docker-group-security:
     name: Docker Group Security
     runs-on: ubuntu-latest

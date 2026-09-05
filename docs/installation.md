@@ -15,9 +15,21 @@ curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-ansible/main/inst
 
 ### Prerequisites
 
+Ansible-core 2.14 or newer is required (`meta/runtime.yml`). On Debian 12+ and
+Ubuntu 24.04+, the distro package is new enough:
+
 ```bash
 sudo apt update
 sudo apt install -y ansible git
+ansible-playbook --version   # first line must show [core 2.14] or newer
+```
+
+On Ubuntu 22.04, Debian 11, and Ubuntu 20.04, `apt install ansible` ships
+2.10 / ansible-core 2.12. Install a current controller first:
+
+```bash
+pip3 install --user 'ansible-core>=2.14'
+# or add the Ansible PPA and install ansible-core
 ```
 
 ### Clone and Run
