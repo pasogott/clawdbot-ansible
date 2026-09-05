@@ -279,9 +279,13 @@ ansible-playbook playbook.yml --ask-become-pass
 
 ## Requirements
 
-- Debian 11+ or Ubuntu 20.04+
+- Debian 12+ or Ubuntu 24.04+ (apt `ansible-core` 2.14 or newer)
 - Root/sudo access
 - Internet connection
+
+On Ubuntu 22.04 or Debian 11, install `ansible-core` 2.14 or newer via `pip3`
+or the Ansible PPA before running `install.sh`. Distro `apt` ansible on those
+releases is older than `requires_ansible: '>=2.14.0'`.
 
 ## Configuration Options
 

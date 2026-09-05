@@ -28,6 +28,7 @@ The test harness runs three sequential tests:
 - `entrypoint.sh` - Test execution script (convergence → verification → idempotency)
 - `verify.yml` - Post-convergence assertions (user exists, packages installed, directories created, etc.)
 - `run-tests.sh` - Local test runner script
+- `install-ansible-version.sh` - Drive `install.sh` with a mocked `ansible-playbook` and require ansible-core 2.14+
 
 ## CI Test Mode
 

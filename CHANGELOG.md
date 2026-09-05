@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fail closed in `install.sh` when `ansible-playbook` is older than ansible-core 2.14, which the collection requires. Ubuntu 22.04 and Debian 11 apt packages stay unsupported unless pip or the Ansible PPA provides 2.14+.
 - Fix local installation failing after package setup by removing tasks that reference the deleted banner template; run the Docker installer harness in CI.
 - Reuse fresh apt metadata on repeated installations while refreshing immediately when the NodeSource repository is added.
 - Remove unused configuration, service, and banner templates; document the native Gateway and onboarding-owned security configuration accurately. Thanks @tosin2013 for the report.
