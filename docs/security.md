@@ -90,8 +90,9 @@ The openclaw user has limited sudo permissions (not full root):
 # Allowed commands only:
 - systemctl start/stop/restart/status openclaw
 - systemctl daemon-reload
-- tailscale commands
-- journalctl for openclaw logs
+- tailscale status/down/version plus diagnostics
+- tailscale up with no extra flags (stored settings only)
+- journalctl -u openclaw with -f, -n 50, and --no-pager
 ```
 
 The user is deliberately excluded from the `docker` group. Membership would

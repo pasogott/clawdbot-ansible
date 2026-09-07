@@ -44,6 +44,7 @@ Everything else runs normally: package installation, user creation, Node.js/pnpm
 |-----------|---------|-------|
 | System packages (35+) | ✅ Yes | Full apt install |
 | User creation + config | ✅ Yes | User, .bashrc, sudoers, SSH dir |
+| Sudoers argument pins | ✅ Yes | `tests/sudoers-scope.yml` rejects `tailscale up *` and `journalctl -u openclaw *` |
 | Node.js + pnpm | ✅ Yes | Full install + version check |
 | Directory structure | ✅ Yes | All .openclaw/* dirs with perms |
 | Git global config | ✅ Yes | Aliases, default branch |
@@ -70,9 +71,11 @@ The pinned lint tools in `requirements-lint.txt` require Python 3.12 or newer; C
 python -m pip install -r requirements-lint.txt
 ansible-galaxy collection install -r requirements.yml
 yamllint .
-ansible-lint playbook.yml tests/docker-group-security.yml
+ansible-lint playbook.yml tests/docker-group-security.yml tests/sudoers-scope.yml
 ansible-playbook playbook.yml --syntax-check
 ansible-playbook tests/docker-group-security.yml --syntax-check
+ansible-playbook tests/sudoers-scope.yml --syntax-check
+ansible-playbook tests/sudoers-scope.yml
 ```
 
 ### Additional Distributions
