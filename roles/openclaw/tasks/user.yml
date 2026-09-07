@@ -55,8 +55,8 @@
       # SECURITY NOTE: These permissions are intentionally limited.
       # If openclaw is compromised, attackers can only:
       # - Manage the openclaw service
-      # - Run basic tailscale diagnostics
-      # - View openclaw logs
+      # - Run basic tailscale diagnostics and stored-settings up/down
+      # - View openclaw unit logs
       #
       # To grant full tailscale control (e.g., for self-healing VPN):
       #   {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale *
@@ -74,19 +74,24 @@
       # daemon-reload affects all units (required after service file changes)
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 
-      # Tailscale - diagnostics + connect/disconnect
-      # NOTE: 'up' allows flags like --advertise-exit-node. For tighter control,
-      # remove 'up' and 'down' lines - operator must then manage VPN manually.
+      # Tailscale - diagnostics + stored-settings connect/disconnect
+      # 'up' is pinned with no extra flags. Exit-node, routes, authkey,
+      # and advertise-* stay root-only.
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale status
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale up
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ip *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale version
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale ping *
       {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/tailscale whois *
 
-      # Journal access - openclaw logs only
-      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw *
+      # Journal access - openclaw unit only (no extra -u/--directory/--file)
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw -f
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw -n 50
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw --no-pager
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw -n 50 --no-pager
+      {{ openclaw_user }} ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u openclaw -f --no-pager
     validate: /usr/sbin/visudo -cf %s
 
 - name: Set openclaw user as primary user for installation

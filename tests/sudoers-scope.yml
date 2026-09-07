@@ -1,0 +1,55 @@
+---
+- name: Verify scoped sudoers argument pins
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    openclaw_user_tasks: "{{ playbook_dir }}/../roles/openclaw/tasks/user.yml"
+    forbidden_sudoers_cmds:
+      - /usr/bin/tailscale up *
+      - /usr/bin/journalctl -u openclaw *
+    required_sudoers_cmds:
+      - /usr/bin/tailscale up
+      - /usr/bin/journalctl -u openclaw
+      - /usr/bin/journalctl -u openclaw -f
+      - /usr/bin/journalctl -u openclaw -n 50
+      - /usr/bin/journalctl -u openclaw --no-pager
+      - /usr/bin/journalctl -u openclaw -n 50 --no-pager
+      - /usr/bin/journalctl -u openclaw -f --no-pager
+
+  tasks:
+    - name: Load service-user task file
+      ansible.builtin.slurp:
+        src: "{{ openclaw_user_tasks }}"
+      register: openclaw_user_tasks_file
+
+    - name: Decode service-user task file
+      ansible.builtin.set_fact:
+        openclaw_user_tasks_text: "{{ openclaw_user_tasks_file.content | b64decode }}"
+
+    - name: Collect NOPASSWD command specifications
+      ansible.builtin.set_fact:
+        openclaw_sudoers_cmds: >-
+          {{
+            openclaw_user_tasks_text.splitlines()
+            | map('trim')
+            | select('search', 'NOPASSWD:')
+            | map('regex_replace', '^.*NOPASSWD:\s*', '')
+            | list
+          }}
+
+    - name: Assert argument wildcards are not granted
+      ansible.builtin.assert:
+        that:
+          - item not in openclaw_sudoers_cmds
+        fail_msg: >-
+          sudoers still allows {{ item }}. Pin exact safe invocations.
+      loop: "{{ forbidden_sudoers_cmds }}"
+
+    - name: Assert pinned safe invocations are present
+      ansible.builtin.assert:
+        that:
+          - item in openclaw_sudoers_cmds
+        fail_msg: "sudoers is missing pinned command {{ item }}"
+      loop: "{{ required_sudoers_cmds }}"
